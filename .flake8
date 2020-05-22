@@ -1,0 +1,9 @@
+[flake8]
+disable-noqa=True
+exclude = .git,.hg,__pycache__,venv
+max-complexity = 14
+inline-quotes = double
+multiline-quotes = """ 
+builtins = _
+verbose = 2
+max-line-length = 120
