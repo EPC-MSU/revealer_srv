@@ -1,0 +1,9 @@
+[Unit]
+Description=Revealer
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/eyepoint/Develop/server/main.py
+
+[Install]
+WantedBy=multi-user.target

@@ -1,29 +1,62 @@
-# md_revealer_srv
+# revealer_srv
 
-Revealer ПО, которое позволяет находить наши устройства в сети.
+Сервер c поддержкой SSDP на python. Сервер получает M-SEARCH и отвечает на них по протоколу UPnP,
 
-https://doc.xisupport.com/ru/8smc5-usb/8SMCn-USB/Related_products/Control_via_Ethernet/Web_interface.html#automatic-device-detection
+## Конфигурационный файл
 
-http://files.xisupport.com/Software.ru.html#revealer-0.1.0-last-updated-16.04.2017
+В папке с программой/скриптом должен присутствовать конфигурационный файл *configuration.ini*. \
+Структура конфигурационного файла:
 
 
+```ini
+[MAIN]
+friendly_name =
+manufacturer =
+manufacturer_url =
+model_description =
+model_name =
+model_number =
+model_url =
+serial_number =
+presentation_url =
 
-Как это работает: 
+[SERVER]
+os =
+os_version =
+product =
+product_version =
+```
 
-* на каждом устройстве запускается сервер;
+Для работы программы обязательно должны быть заполнены поля *friendly_name*, *product* и *product_version*. Остальные поля могут отсутствовать или быть пустыми - они будут интерпретированы как пустые строки.
 
-* программа ревилер шлёт широковещательный пакет в сеть;
+## Автозапуск на Linux
 
-* при получении этого пакета сервера на устройствах отвечают ревилеру;
+Чтобы настроить автозапуск с помощью systemd, нужно создать сервис revealer, который будет запускаться после подключения устройства к сети.
 
-* ревилер смотрит, кто ему ответил, и составляет список устройств.
+1. Поместить файл *revealer.service* в папку /etc/systemd/system. \
+Bash-скрипт, создающий файл (разумеется, адрес скрипта main.py должен быть правильный):
+```bash
+cd /etc/systemd/system
+echo -e "[Unit]\nDescription=Revealer\nAfter=network-online.target\n\n[Service]\nExecStart=/usr/bin/python3 /home/eyepoint/Develop/server/main.py\n\n[Install]\nWantedBy=multi-user.target" > revealer.service
+```
 
- 
 
-В данном репозитории хранится простой сервер на python, который позволяет отвечать клиентам-ревилерам.
+2. Затем дать команду, что этот сервис должен быть включен в автозапуск:
 
- 
+```bash
+sudo systemctl enable revealer
+sudo systemctl start revealer
+```
 
-## Руководство по запуску
+Если после перезапуска не запустилось, можно посмотреть, что там с программой:
+```bash
+sudo systemctl status revealer
+sudo journalctl -u revealer -b
+```
 
- 
+
+## Запуск скрипта на python
+
+
+## Выпуск релиза
+См. README_RELEASE
