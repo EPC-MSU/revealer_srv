@@ -1,5 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+from lib.ssdp import logger
+import sys
 
 
 class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
@@ -102,6 +104,14 @@ class UPNPHTTPServerBase(HTTPServer):
         self.serial_number = None
         self.uuid = None
         self.presentation_url = None
+
+    def server_bind(self) -> None:
+        try:
+            HTTPServer.server_bind(self)
+        except (OSError) as e:
+            logger.fatal("Error creating http server on port %d. Please check that the port is not in use: %r"
+                         % (self.port, e))
+            sys.exit()
 
 
 class UPNPHTTPServer(threading.Thread):

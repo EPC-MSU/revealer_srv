@@ -3,7 +3,8 @@ Description=Revealer
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/eyepoint/Develop/server/main.py
+WorkingDirectory=/home/eyepoint/Develop/server/
+ExecStart=/usr/bin/python3 main.py
 
 [Install]
 WantedBy=multi-user.target

@@ -4,14 +4,16 @@ import random
 from email.utils import formatdate
 import ifaddr
 from errno import ENOPROTOOPT
+import sys
 
 
 SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
 adapters = ifaddr.get_adapters()
+bad_interfaces = []
 
 
-class RevealerFriendlyServer(SSDPServer):
+class UPNPSSDPServer(SSDPServer):
     def __init__(self):
         SSDPServer.__init__(self)
 
@@ -45,10 +47,17 @@ class RevealerFriendlyServer(SSDPServer):
                     self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, ssdp_addr + interface)
                     logger.info('Joined multicast on interface %s/%d' % (ip.ip, ip.network_prefix))
                 except socket.error as msg:
-                    logger.error("Failed to join multicast on interface %s: %r" % (ip.ip, msg))
+                    logger.warn("Failed to join multicast on interface %s. This interface will be ignored. %r"
+                                % (ip.ip, msg))
+                    bad_interfaces.append(ip.ip)
                     continue
 
-        self.sock.bind(('', SSDP_PORT))
+        try:
+            self.sock.bind(('', SSDP_PORT))
+        except (OSError) as e:
+            logger.fatal("""Error creating ssdp server on port %d. Please check that the port is not in use: %r"""
+                         % (SSDP_PORT, e))
+            sys.exit()
         self.sock.settimeout(1)
 
         while True:
@@ -78,6 +87,8 @@ class RevealerFriendlyServer(SSDPServer):
                 for k, v in i.items():
                     if k == 'USN':
                         usn = v
+                    if k == 'LOCATION':
+                        v = '/Basic_info.xml'
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
 
@@ -98,15 +109,18 @@ class RevealerFriendlyServer(SSDPServer):
                                 continue
                             if ip.ip == '127.0.0.1':
                                 continue
+                            if ip.ip in bad_interfaces:
+                                continue
 
                             if_addr = socket.inet_aton(ip.ip)
                             try:
                                 self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, if_addr)
                                 logger.info('Set interface to %s' % ip.ip)
                             except socket.error as msg:
-                                logger.error("failure connecting to interface %s: %r" % (ip.ip, msg))
+                                logger.warn("failure connecting to interface %s: %r" % (ip.ip, msg))
                                 continue
 
+                            # format: LOCATION: http://172.16.130.67:80/Basic_info.xml
                             url = 'http://{}:80/Basic_info.xml'.format(ip.ip)
                             self.known[usn]['LOCATION'] = url
 

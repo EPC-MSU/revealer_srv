@@ -1,8 +1,9 @@
-from ssdp_server import RevealerFriendlyServer, logger
+from ssdp_server import UPNPSSDPServer, logger
 from uuid import uuid4
 from http_server import UPNPHTTPServer
 import configparser
 import sys
+from version import Version
 
 
 def check_required_field(config, logger, section_name, field_name):
@@ -27,6 +28,7 @@ def check_optional_field(config, logger, section_name, field_name):
 
 
 if __name__ == '__main__':
+    print("Revealer friendly SSDP server: version {}".format(Version.full))
 
     filename = 'configuration.ini'
     http_port = 80
@@ -87,13 +89,10 @@ if __name__ == '__main__':
     product_version = config['SERVER']['product_version']
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
 
-    # format: LOCATION: http://172.16.130.67:80/Basic_info.xml
-    url = '/Basic_info.xml'
-
-    ssdp_server = RevealerFriendlyServer()
+    ssdp_server = UPNPSSDPServer()
     ssdp_server.register('local',
                          usn,
                          'upnp:rootdevice',
-                         url,
+                         '',  # will be set while constructing ssdp messages
                          server=server_data)
     ssdp_server.run()
