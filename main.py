@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     filename = 'configuration.ini'
     http_port = 80
-    logger.setLevel(30)
+    logger.setLevel(20)
     device_uuid = uuid4()
 
     config = configparser.ConfigParser(allow_no_value=True)

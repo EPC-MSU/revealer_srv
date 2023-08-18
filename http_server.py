@@ -93,7 +93,12 @@ class UPNPHTTPServerBase(HTTPServer):
     A simple HTTP server that knows the information about a UPnP device.
     """
     def __init__(self, server_address, request_handler_class):
-        HTTPServer.__init__(self, server_address, request_handler_class)
+        try:
+            HTTPServer.__init__(self, server_address, request_handler_class)
+        except OSError as e:
+            logger.fatal("Error creating http server on port %d. Please check that the port is not in use: %r"
+                         % (server_address[1], e))
+            sys.exit()
         self.port = None
         self.friendly_name = None
         self.manufacturer = None
@@ -104,14 +109,6 @@ class UPNPHTTPServerBase(HTTPServer):
         self.serial_number = None
         self.uuid = None
         self.presentation_url = None
-
-    def server_bind(self) -> None:
-        try:
-            HTTPServer.server_bind(self)
-        except (OSError) as e:
-            logger.fatal("Error creating http server on port %d. Please check that the port is not in use: %r"
-                         % (self.port, e))
-            sys.exit()
 
 
 class UPNPHTTPServer(threading.Thread):
