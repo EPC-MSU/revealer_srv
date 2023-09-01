@@ -45,12 +45,6 @@ sudo systemctl enable revealer
 sudo systemctl start revealer
 ```
 
-## Запуск скрипта на python
-
-### Запуск в Windows
-
-### Запуск в Linux
-
 
 ## Выпуск релиза
 
@@ -78,4 +72,18 @@ chmod +x ./release.sh
 * Установите версию python3 с поддержкой виртуальных окружений:
 ```bash
 sudo apt-get install python3.8-venv
+```
+
+## Запуск скрипта на python
+Установить зависимости (см. requirements.txt) в виртуальное окружениеб перейти в папку с файлом main.py и запустить скрипт:
+
+### Запуск в Windows (из venv)
+
+```bash
+venv\Scripts\python main.py
+```
+
+### Запуск в Linux (из venv)
+```bash
+venv/bin/python3 main.py
 ```

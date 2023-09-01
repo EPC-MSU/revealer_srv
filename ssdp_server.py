@@ -68,22 +68,12 @@ class UPNPSSDPServer(SSDPServer):
                 logger.warn("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
 
         try:
-            self.sock.bind(('0.0.0.0', SSDP_PORT))
+            self.sock.bind(('', SSDP_PORT))
         except (OSError) as e:
             logger.fatal("""Error creating ssdp server on port %d. Please check that the port is not in use: %r"""
                          % (SSDP_PORT, e))
             sys.exit()
         self.sock.settimeout(1)
-
-        # usn = None
-        # for i in self.known.values():
-        #     for k, v in i.items():
-        #         if k == 'USN':
-        #             usn = v
-
-        # import time
-        # self.do_notify(usn)
-        # time.sleep(5)
 
         while True:
             try:
@@ -92,75 +82,7 @@ class UPNPSSDPServer(SSDPServer):
             except socket.timeout:
                 continue
         self.shutdown()
-        
-    def datagram_received(self, data, host_port):
-        """Handle a received multicast datagram."""
 
-        (host, port) = host_port
-
-        try:
-            header, payload = data.decode().split('\r\n\r\n')[:2]
-            #print(data.decode())
-        except ValueError as err:
-            logger.error(err)
-            return
-
-        lines = header.split('\r\n')
-        cmd = lines[0].split(' ')
-        lines = map(lambda x: x.replace(': ', ':', 1), lines[1:])
-        lines = filter(lambda x: len(x) > 0, lines)
-
-        headers = [x.split(':', 1) for x in lines]
-        headers = dict(map(lambda x: (x[0].lower(), x[1]), headers))
-
-        logger.info('SSDP command %s %s - from %s:%d' % (cmd[0], cmd[1], host, port))
-        logger.debug('with headers: {}.'.format(headers))
-        if cmd[0] == 'M-SEARCH' and cmd[1] == '*':
-            # SSDP discovery
-            self.discovery_request(headers, (host, port))
-        elif cmd[0] == 'NOTIFY' and cmd[1] == '*':
-            # SSDP presence
-            logger.debug('NOTIFY *')
-        else:
-            logger.warning('Unknown SSDP command %s %s' % (cmd[0], cmd[1]))
-    
-        
-    def send_it(self, response, destination, delay, usn):
-        logger.info('HTTP/1.1 200 OK response delayed by %ds to %r' % (delay, destination))
-        try:
-            self.sock.sendto(response.encode(), destination)
-        except (AttributeError, socket.error) as msg:
-            logger.warning("failure sending out byebye notification: %r" % msg)
-            
-    
-    def do_notify(self, usn):
-        """Do notification"""
-
-        if self.known[usn]['SILENT']:
-            return
-        logger.info('NOTIFY response for %s' % usn)
-
-        resp = [
-            'NOTIFY * HTTP/1.1',
-            'HOST: %s:%d' % (SSDP_ADDR, SSDP_PORT),
-            'NTS: ssdp:alive',
-        ]
-        stcpy = dict(self.known[usn].items())
-        stcpy['NT'] = stcpy['ST']
-        del stcpy['ST']
-        del stcpy['MANIFESTATION']
-        del stcpy['SILENT']
-        del stcpy['HOST']
-        del stcpy['last-seen']
-
-        resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
-        resp.extend(('', ''))
-        logger.debug('do_notify content', resp)
-        try:
-            self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
-            self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
-        except (AttributeError, socket.error) as msg:
-            logger.warning("failure sending out alive notification: %r" % msg)
 
     def discovery_request(self, headers, host_port):
 
@@ -189,6 +111,17 @@ class UPNPSSDPServer(SSDPServer):
                         usn = v
                     if k == 'LOCATION':
                         v = '/Basic_info.xml'
+
+                        for adapter in adapters:
+                            for ip in adapter.ips:
+                                if host == ip.ip:
+                                    # For correct windows network search 
+                                    # from the same PC
+
+                                    # If there is a LOCATION field, the link needs to be correct
+                                    # for windows to show the device
+                                    v = 'http://{}:80/Basic_info.xml'.format(host)
+                        
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
 
@@ -227,3 +160,43 @@ class UPNPSSDPServer(SSDPServer):
                             
                     print()
                     print()
+
+# Переопределения для более удобного логирования
+    
+        
+    def send_it(self, response, destination, delay, usn):
+        logger.info('HTTP/1.1 200 OK response delayed by %ds to %r' % (delay, destination))
+        try:
+            self.sock.sendto(response.encode(), destination)
+        except (AttributeError, socket.error) as msg:
+            logger.warning("Failure sending out HTTP/1.1 200 OK response: %r" % msg)
+            
+    
+    def do_notify(self, usn):
+        """Do notification"""
+
+        if self.known[usn]['SILENT']:
+            return
+        logger.info('NOTIFY response for %s' % usn)
+
+        resp = [
+            'NOTIFY * HTTP/1.1',
+            'HOST: %s:%d' % (SSDP_ADDR, SSDP_PORT),
+            'NTS: ssdp:alive',
+        ]
+        stcpy = dict(self.known[usn].items())
+        stcpy['NT'] = stcpy['ST']
+        del stcpy['ST']
+        del stcpy['MANIFESTATION']
+        del stcpy['SILENT']
+        del stcpy['HOST']
+        del stcpy['last-seen']
+
+        resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
+        resp.extend(('', ''))
+        logger.debug('do_notify content', resp)
+        try:
+            self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
+            self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
+        except (AttributeError, socket.error) as msg:
+            logger.warning("failure sending out NOTIFY response: %r" % msg)
