@@ -21,8 +21,4 @@ if exist build rd /S /Q build
 if exist dist rd /S /Q dist
 if exist venv rd /S /Q venv
 if exist *.spec del *.spec
-
-venv\Scripts\python -m pip freeze 
-venv\Scripts\python -V
-venv\Scripts\python -m pip --version
 pause
