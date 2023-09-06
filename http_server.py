@@ -4,6 +4,37 @@ from lib.ssdp import logger
 import sys
 
 
+html_page_index = """
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Revealer Server</title>
+  </head>
+  <body>
+    <h1>Revealer Server</h1>
+    <p>This is default device web page provided by Revealer Server – UPnP SSDP discovery server.</p>
+    <p>In case you have alternative implementation of the device web page
+    set correct URL in the discovery server configuration file.</p>
+  </body>
+</html>
+"""
+
+html_page_404 = """
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>404 - Page not found</title>
+  </head>
+  <body>
+    <h1>404 - Page not found</h1>
+    <p>This page provided by Revealer Server – UPnP SSDP discovery server.</p>
+  </body>
+</html>
+"""
+
+
 class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
     """
     A HTTP handler that serves the UPnP XML files.
@@ -18,17 +49,17 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(self.get_device_xml().encode())
             return
-        if self.path == '/boucherie_wsd.xml':
+        if self.path == '/index.html':
             self.send_response(200)
-            self.send_header('Content-type', 'application/xml')
+            self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(self.get_wsd_xml().encode())
+            self.wfile.write(html_page_index.encode())
             return
         else:
             self.send_response(404)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(b"Not found.")
+            self.wfile.write(html_page_404.encode())
             return
 
     def get_device_xml(self):
@@ -51,16 +82,6 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
         <modelURL>{model_url}</modelURL>
         <serialNumber>{serial_number}</serialNumber>
         <UDN>uuid:{uuid}</UDN>
-        <serviceList>
-            <service>
-                <URLBase>http://xxx.yyy.zzz.aaaa:5000</URLBase>
-                <serviceType>urn:boucherie.example.com:service:Jambon:1</serviceType>
-                <serviceId>urn:boucherie.example.com:serviceId:Jambon</serviceId>
-                <controlURL>/jambon</controlURL>
-                <eventSubURL/>
-                <SCPDURL>/boucherie_wsd.xml</SCPDURL>
-            </service>
-        </serviceList>
         <presentationURL>{presentation_url}</presentationURL>
     </device>
 </root>"""
@@ -74,18 +95,6 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
                           serial_number=self.server.serial_number,
                           uuid=self.server.uuid,
                           presentation_url=self.server.presentation_url)
-
-    @staticmethod
-    def get_wsd_xml():
-        """
-        Get the device WSD file.
-        """
-        return """<scpd xmlns="urn:schemas-upnp-org:service-1-0">
-<specVersion>
-<major>1</major>
-<minor>0</minor>
-</specVersion>
-</scpd>"""
 
 
 class UPNPHTTPServerBase(HTTPServer):

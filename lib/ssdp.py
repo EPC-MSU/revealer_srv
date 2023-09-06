@@ -75,7 +75,6 @@ class SSDPServer:
 
         try:
             header, payload = data.decode().split('\r\n\r\n')[:2]
-            #print(data.decode())
         except ValueError as err:
             logger.error(err)
             return
