@@ -6,7 +6,7 @@ from email.utils import formatdate
 import ifaddr
 from errno import ENOPROTOOPT
 import sys
-
+import ipaddress
 
 SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
@@ -33,8 +33,8 @@ class UPNPSSDPServer(SSDPServer):
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         if system() == 'Linux':
             self._setup_socket_on_linux()
-
-        self._setup_socket_non_linux()
+        else:
+            self._setup_socket_non_linux()
 
     def _setup_socket_on_linux(self):
         logger.info("Linux system. Will try to join multicast on interface 0.0.0.0")
@@ -121,13 +121,18 @@ class UPNPSSDPServer(SSDPServer):
 
                         for adapter in self.adapters:
                             for ip in adapter.ips:
-                                if host == ip.ip:
+                                if not isinstance(ip.ip, str):
+                                    continue
+                                if ip.ip == "127.0.0.1":
+                                    continue
+                                network = ipaddress.IPv4Network(ip.ip+"/"+str(ip.network_prefix), strict=False)
+                                if ipaddress.ip_address(host) in ipaddress.ip_network(network):
                                     # For correct windows network search
                                     # from the same PC
 
                                     # If there is a LOCATION field, the link needs to be correct
                                     # for windows to show the device
-                                    v = 'http://{}:80/Basic_info.xml'.format(host)
+                                    v = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
 
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
@@ -162,7 +167,7 @@ class UPNPSSDPServer(SSDPServer):
                     continue
 
                 # format: LOCATION: http://172.16.130.67:80/Basic_info.xml
-                url = 'http://{}:80/Basic_info.xml'.format(ip.ip)
+                url = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
                 self.known[usn]['LOCATION'] = url
 
                 self.do_notify(usn)

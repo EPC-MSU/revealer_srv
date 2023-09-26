@@ -99,7 +99,7 @@ class SSDPServer:
             logger.warning('Unknown SSDP command %s %s' % (cmd[0], cmd[1]))
 
     def register(self, manifestation, usn, st, location, server=SERVER_ID, cache_control='max-age=1800', silent=False,
-                 host=None):
+                 host=None, location_port=80):
         """Register a service or device that this SSDP server will
         respond to."""
 
@@ -117,6 +117,8 @@ class SSDPServer:
         self.known[usn]['SILENT'] = silent
         self.known[usn]['HOST'] = host
         self.known[usn]['last-seen'] = time.time()
+        
+        self.location_port = location_port
 
         if manifestation == 'local' and self.sock:
             self.do_notify(usn)

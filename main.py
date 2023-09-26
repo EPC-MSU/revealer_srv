@@ -31,7 +31,7 @@ if __name__ == '__main__':
     print("Revealer friendly SSDP server: version {}".format(Version.full))
 
     filename = 'configuration.ini'
-    http_port = 80
+    http_port = 5050
     logger.setLevel(20)
     device_uuid = uuid4()
 
@@ -94,5 +94,5 @@ if __name__ == '__main__':
                          usn,
                          'upnp:rootdevice',
                          '',  # will be set while constructing ssdp messages
-                         server=server_data)
+                         server=server_data, location_port=http_port)
     ssdp_server.run()

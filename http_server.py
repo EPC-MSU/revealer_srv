@@ -128,7 +128,7 @@ class UPNPHTTPServer(threading.Thread):
     def __init__(self, port, friendly_name, manufacturer, manufacturer_url, model_description, model_name,
                  model_number, model_url, serial_number, uuid, presentation_url):
         threading.Thread.__init__(self, daemon=True)
-        self.server = UPNPHTTPServerBase(('', port), UPNPHTTPServerHandler)
+        self.server = UPNPHTTPServerBase(('0.0.0.0', port), UPNPHTTPServerHandler)
         self.server.port = port
         self.server.friendly_name = friendly_name
         self.server.manufacturer = manufacturer
