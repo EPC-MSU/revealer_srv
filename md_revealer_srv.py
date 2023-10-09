@@ -1,4 +1,4 @@
-from asyncio import get_event_loop, async as ensure_future
+from asyncio import get_event_loop, _async as ensure_future
 import logging
 
 
