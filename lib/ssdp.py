@@ -117,7 +117,7 @@ class SSDPServer:
         self.known[usn]['SILENT'] = silent
         self.known[usn]['HOST'] = host
         self.known[usn]['last-seen'] = time.time()
-        
+
         self.location_port = location_port
 
         if manifestation == 'local' and self.sock:
