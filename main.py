@@ -75,7 +75,7 @@ if __name__ == '__main__':
                                  config['MAIN']['model_name'],
                                  config['MAIN']['model_number'],
                                  config['MAIN']['model_url'],
-                                 config['MAIN']['model_number'],
+                                 config['MAIN']['serial_number'],
                                  device_uuid,
                                  config['MAIN']['presentation_url'])
     http_server.start()
