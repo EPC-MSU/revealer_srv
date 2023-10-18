@@ -4,6 +4,7 @@ from http_server import UPNPHTTPServer
 import configparser
 import sys
 from version import Version
+import time
 
 
 def check_required_field(config, logger, section_name, field_name):
@@ -32,6 +33,7 @@ if __name__ == '__main__':
 
     filename = 'configuration.ini'
     http_port = 5050
+    time_after_error_sec = 3
     logger.setLevel(20)
     device_uuid = uuid4()
 
@@ -67,19 +69,6 @@ if __name__ == '__main__':
     for label in config_server_labels:
         check_optional_field(config, logger, 'SERVER', label)
 
-    http_server = UPNPHTTPServer(http_port,
-                                 config['MAIN']['friendly_name'],
-                                 config['MAIN']['manufacturer'],
-                                 config['MAIN']['manufacturer_url'],
-                                 config['MAIN']['model_description'],
-                                 config['MAIN']['model_name'],
-                                 config['MAIN']['model_number'],
-                                 config['MAIN']['model_url'],
-                                 config['MAIN']['serial_number'],
-                                 device_uuid,
-                                 config['MAIN']['presentation_url'])
-    http_server.start()
-
     usn = 'uuid:{}::upnp:rootdevice'.format(device_uuid)
 
     # format: SERVER: lwIP/1.4.1 UPnP/2.0 8SMC5-USB/4.7.7
@@ -95,4 +84,27 @@ if __name__ == '__main__':
                          'upnp:rootdevice',
                          '',  # will be set while constructing ssdp messages
                          server=server_data, location_port=http_port)
-    ssdp_server.run()
+    while True:
+        # try to create http server and start
+        http_server = UPNPHTTPServer(http_port,
+                                     config['MAIN']['friendly_name'],
+                                     config['MAIN']['manufacturer'],
+                                     config['MAIN']['manufacturer_url'],
+                                     config['MAIN']['model_description'],
+                                     config['MAIN']['model_name'],
+                                     config['MAIN']['model_number'],
+                                     config['MAIN']['model_url'],
+                                     config['MAIN']['serial_number'],
+                                     device_uuid,
+                                     config['MAIN']['presentation_url'])
+        http_server.start()
+        result = ssdp_server.run()
+
+        if result == 1:
+            logger.error("SSDP server could not be started because it can't join multicast group on any interfaces.\n"
+                         "It will be restarted in {} seconds.".format(time_after_error_sec))
+            # stop http server to start again later
+            http_server.server.shutdown()
+            del http_server
+            # wait for some time to try again
+            time.sleep(time_after_error_sec)

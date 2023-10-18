@@ -12,6 +12,9 @@ SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
 bad_interfaces = []
 
+RESULT_OK = 0
+RESULT_ERROR = 1
+
 
 class UPNPSSDPServer(SSDPServer):
     def __init__(self):
@@ -32,9 +35,11 @@ class UPNPSSDPServer(SSDPServer):
 
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         if system() == 'Linux':
-            self._setup_socket_on_linux()
+            result = self._setup_socket_on_linux()
         else:
-            self._setup_socket_non_linux()
+            result = self._setup_socket_non_linux()
+
+        return result
 
     def _setup_socket_on_linux(self):
         logger.info("Linux system. Will try to join multicast on interface 0.0.0.0")
@@ -43,13 +48,15 @@ class UPNPSSDPServer(SSDPServer):
             ssdp_addr = socket.inet_aton(SSDP_ADDR)
             self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, ssdp_addr + interface)
             logger.info('Joined multicast on interface 0.0.0.0')
+            return RESULT_OK
         except socket.error as msg:
             logger.warn("Failed to join multicast on interface 0.0.0.0: %r" % msg)
-            return
+            return RESULT_ERROR
 
     def _setup_socket_non_linux(self):
         logger.info("Not a Linux system. Joining multicast on all interfaces")
         if_count = 0
+        self.adapters = ifaddr.get_adapters()
         for adapter in self.adapters:
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
@@ -69,15 +76,25 @@ class UPNPSSDPServer(SSDPServer):
                                 % (ip.ip, msg))
                     bad_interfaces.append(ip.ip)
                     continue
+
         if if_count == len(bad_interfaces):
             logger.warn("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
+            return RESULT_ERROR
+        else:
+            # we joined multicast on at least one interface so return 0
+            return RESULT_OK
 
     def run(self):
-        self._setup_socket()
+
+        result = self._setup_socket()
+
+        if result == RESULT_ERROR:
+            # if we are not able to join multicast on any interfaces - we want to try again
+            return result
 
         try:
             self.sock.bind(('', SSDP_PORT))
-        except (OSError) as e:
+        except OSError as e:
             logger.fatal("""Error creating ssdp server on port %d. Please check that the port is not in use: %r"""
                          % (SSDP_PORT, e))
             sys.exit()
@@ -90,6 +107,35 @@ class UPNPSSDPServer(SSDPServer):
             except socket.timeout:
                 continue
         self.shutdown()
+        return RESULT_ERROR
+
+    def _create_location_link(self, host_ip: str) -> str:
+        """
+        Method for creating LOCATION link to send to specific host.
+        :param host_ip: str
+          IP-address of the host to whom we should send our discovery answer.
+        :return:
+        """
+
+        location_link = '/Basic_info.xml'
+
+        self.adapters = ifaddr.get_adapters()
+        for adapter in self.adapters:
+            for ip in adapter.ips:
+                if not isinstance(ip.ip, str):
+                    continue
+                if ip.ip == "127.0.0.1":
+                    continue
+                network = ipaddress.IPv4Network(ip.ip + "/" + str(ip.network_prefix), strict=False)
+                if ipaddress.ip_address(host_ip) in ipaddress.ip_network(network):
+                    # For correct windows network search
+                    # from the same PC
+
+                    # If there is a LOCATION field, the link needs to be correct
+                    # for windows to show the device
+                    location_link = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
+
+        return location_link
 
     def discovery_request(self, headers, host_port):
 
@@ -117,22 +163,7 @@ class UPNPSSDPServer(SSDPServer):
                     if k == 'USN':
                         usn = v
                     if k == 'LOCATION':
-                        v = '/Basic_info.xml'
-
-                        for adapter in self.adapters:
-                            for ip in adapter.ips:
-                                if not isinstance(ip.ip, str):
-                                    continue
-                                if ip.ip == "127.0.0.1":
-                                    continue
-                                network = ipaddress.IPv4Network(ip.ip+"/"+str(ip.network_prefix), strict=False)
-                                if ipaddress.ip_address(host) in ipaddress.ip_network(network):
-                                    # For correct windows network search
-                                    # from the same PC
-
-                                    # If there is a LOCATION field, the link needs to be correct
-                                    # for windows to show the device
-                                    v = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
+                        v = self._create_location_link(host_ip=host)
 
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
@@ -149,6 +180,7 @@ class UPNPSSDPServer(SSDPServer):
                     self.notify_from_all_interfaces(usn)
 
     def notify_from_all_interfaces(self, usn):
+        self.adapters = ifaddr.get_adapters()
         for adapter in self.adapters:
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
