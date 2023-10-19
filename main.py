@@ -5,6 +5,7 @@ import configparser
 import sys
 from version import Version
 import time
+from optparse import OptionParser
 
 
 def check_required_field(config, logger, section_name, field_name):
@@ -28,13 +29,38 @@ def check_optional_field(config, logger, section_name, field_name):
     return
 
 
+def parse_options():
+    """
+    Parse options from the key words.
+    :return: options given.
+        This structure contains .config_file with the name of the configuration file.
+    """
+
+    parser = OptionParser()
+    parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
+                      help="Add this option to make server running verbose. "
+                           "Without this option only errors will be logged.")
+    (options, args) = parser.parse_args()
+
+    return options
+
+
 if __name__ == '__main__':
+
+    options = parse_options()
+
     print("Revealer friendly SSDP server: version {}".format(Version.full))
 
     filename = 'configuration.ini'
     http_port = 5050
     time_after_error_sec = 3
-    logger.setLevel(20)
+    if options.verbose:
+        # if verbose mode is requested - set logger level to info
+        logger.setLevel(20)
+    else:
+        # if we should be quiet - set it to errors
+        logger.setLevel(40)
+
     device_uuid = uuid4()
 
     config = configparser.ConfigParser(allow_no_value=True)
@@ -101,7 +127,8 @@ if __name__ == '__main__':
         result = ssdp_server.run()
 
         if result == 1:
-            logger.error("SSDP server could not be started because it can't join multicast group on any interfaces.\n"
+            logger.error("SSDP server could not be started because it can't join the multicast group"
+                         " on any interfaces.\n"
                          "It will be restarted in {} seconds.".format(time_after_error_sec))
             # stop http server to start again later
             http_server.server.shutdown()
