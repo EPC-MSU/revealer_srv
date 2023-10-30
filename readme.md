@@ -36,9 +36,9 @@ product_version =
 
 Чтобы настроить автозапуск с помощью systemd, нужно создать сервис, который будет запускаться после подключения устройства к сети.
 
-1. В файле `revealer.service` в строке WorkingDirectory указать правильный путь на папку со скриптом. Поместить этот файл в папку /etc/systemd/system.
+* В файле `revealer.service` в строке WorkingDirectory указать правильный путь на папку со скриптом. Поместить этот файл в папку /etc/systemd/system.
 
-2. Дать команду systemd, что этот сервис должен быть включен в автозапуск:
+* Дать команду systemd, что этот сервис должен быть включен в автозапуск:
 
 ```bash
 sudo systemctl enable revealer
@@ -50,7 +50,7 @@ sudo systemctl start revealer
 
 ### Выпуск релиза в Windows
 
-5. Для выпуска релиза в Windows нужно выполнить скрипт `release.bat`:
+* Для выпуска релиза в Windows нужно выполнить скрипт `release.bat`:
 
 ```bash
 release.bat
@@ -58,7 +58,7 @@ release.bat
 
 ### Выпуск релиза в Linux
 
-5. Для выпуска релиза в Linux нужно выполнить скрипт `release.sh`:
+* Для выпуска релиза в Linux нужно выполнить скрипт `release.sh`:
 
 ```bash
 bash release.sh
