@@ -40,6 +40,7 @@ def parse_options():
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                       help="Add this option to make server running verbose. "
                            "Without this option only errors will be logged.")
+    parser.add_option("-c", "--config", default="configuration.ini", help="Configuration file path")
     (options, args) = parser.parse_args()
 
     return options
@@ -51,7 +52,7 @@ if __name__ == '__main__':
 
     print("Revealer friendly SSDP server: version {}".format(Version.full))
 
-    filename = 'configuration.ini'
+    config_file_path = options.config
     http_port = 5050
     time_after_error_sec = 3
     if options.verbose:
@@ -65,10 +66,10 @@ if __name__ == '__main__':
 
     config = configparser.ConfigParser(allow_no_value=True)
     try:
-        with open(filename) as f:
+        with open(config_file_path) as f:
             config.read_file(f)
     except IOError as e:
-        logger.fatal("Configuration file '%s' could not be opened: %r" % (filename, e))
+        logger.fatal("Configuration file '%s' could not be opened: %r" % (config_file_path, e))
         sys.exit()
 
     # Check sections
