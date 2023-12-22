@@ -12,10 +12,49 @@ html_page_index = """
     <title>Revealer Server</title>
   </head>
   <body>
-    <h1>Revealer Server</h1>
+    <h1>{friendly_name}</h1>
     <p>This is default device web page provided by Revealer Server – UPnP SSDP discovery server.</p>
     <p>In case you have alternative implementation of the device web page
     set correct URL in the discovery server configuration file.</p>
+    <h2>Device information</h2>
+    <table>
+        <tr>
+            <td>Device name:</td>
+            <td>{friendly_name}</td>
+        </tr>
+        <tr>
+            <td>Serial number:</td>
+            <td>{serial_number}</td>
+        </tr>
+        <tr>
+            <td>UUID:</td>
+            <td>{uuid}</td>
+        </tr>
+        <tr>
+            <td>Manufacturer:</td>
+            <td>{manufacturer}</td>
+        </tr>
+        <tr>
+            <td>Manufacturer web-site:</td>
+            <td><a href={manufacturer_url}>{manufacturer_url}</a></td>
+        </tr>
+        <tr>
+            <td>Model name:</td>
+            <td>{model_name}</td>
+        </tr>
+        <tr>
+            <td>Model number:</td>
+            <td>{model_number}</td>
+        </tr>
+        <tr>
+            <td>Model description:</td>
+            <td>{model_description}</td>
+        </tr>
+        <tr>
+            <td>Model web-site:</td>
+            <td><a href={model_url}>{model_url}</a></td>
+        </tr>
+    </table>
   </body>
 </html>
 """
@@ -53,7 +92,7 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(html_page_index.encode())
+            self.wfile.write(self.get_index_html().encode())
             return
         else:
             self.send_response(404)
@@ -61,6 +100,18 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html_page_404.encode())
             return
+            
+    def get_index_html(self):
+
+        return html_page_index.format(friendly_name=self.server.friendly_name,
+                                      manufacturer=self.server.manufacturer,
+                                      manufacturer_url=self.server.manufacturer_url,
+                                      model_name=self.server.model_name,
+                                      model_number=self.server.model_number,
+                                      model_description=self.server.model_description,
+                                      model_url=self.server.model_url,
+                                      serial_number=self.server.serial_number,
+                                      uuid=self.server.uuid)
 
     def get_device_xml(self):
         """
