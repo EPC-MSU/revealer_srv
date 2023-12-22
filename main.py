@@ -123,7 +123,8 @@ if __name__ == '__main__':
                                      config['MAIN']['model_url'],
                                      config['MAIN']['serial_number'],
                                      device_uuid,
-                                     config['MAIN']['presentation_url'])
+                                     config['MAIN']['presentation_url'],
+                                     redirect_port=config['MAIN']['redirect_port'])
         http_server.start()
         result = ssdp_server.run()
 

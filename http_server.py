@@ -50,10 +50,28 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.wfile.write(self.get_device_xml().encode())
             return
         if self.path == '/index.html':
+            """print(self.request.getsockname()[0])
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            self.wfile.write(html_page_index.encode())
+            self.wfile.write(html_page_index.encode())"""
+
+            if self.server.redirect_port is None:
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(html_page_index.encode())
+            else:
+                ip_address = self.request.getsockname()[0]
+                self.send_response(302)
+                self.send_header('Location','http://' + ip_address + ':' + str(self.server.redirect_port) + '/index.html')
+                self.end_headers()
+            return
+        if self.path == '/redirect.html':
+            ip_address = self.request.getsockname()[0]
+            self.send_response(301)
+            self.send_header('Location','https://' + ip_address + ':8888/tree')
+            self.end_headers()
             return
         else:
             self.send_response(404)
@@ -118,6 +136,7 @@ class UPNPHTTPServerBase(HTTPServer):
         self.serial_number = None
         self.uuid = None
         self.presentation_url = None
+        self.redirect_port = None  # port from the configuration to which we should redirect index.html if it is defined
 
 
 class UPNPHTTPServer(threading.Thread):
@@ -126,7 +145,7 @@ class UPNPHTTPServer(threading.Thread):
     """
 
     def __init__(self, port, friendly_name, manufacturer, manufacturer_url, model_description, model_name,
-                 model_number, model_url, serial_number, uuid, presentation_url):
+                 model_number, model_url, serial_number, uuid, presentation_url, redirect_port=None):
         threading.Thread.__init__(self, daemon=True)
         self.server = UPNPHTTPServerBase(('0.0.0.0', port), UPNPHTTPServerHandler)
         self.server.port = port
@@ -140,6 +159,7 @@ class UPNPHTTPServer(threading.Thread):
         self.server.serial_number = serial_number
         self.server.uuid = uuid
         self.server.presentation_url = presentation_url
+        self.server.redirect_port = redirect_port
 
     def run(self):
         self.server.serve_forever()
