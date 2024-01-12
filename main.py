@@ -7,6 +7,17 @@ from version import Version
 import time
 from optparse import OptionParser
 
+config_error_string = """This program requires a configuration file to work. Minimal structure:
+
+[MAIN]
+friendly_name = test
+[SERVER]
+product = name
+product_version = 1
+
+Optional MAIN fileds: manufacturer, manufacturer_url, model_description, model_name, model_number, model_url, presentation_url.
+Optional SERVER fields: os, os_version."""
+
 
 def check_required_field(config, logger, section_name, field_name):
     if field_name not in config[section_name]:
@@ -40,7 +51,7 @@ def parse_options():
     parser.add_option("-v", "--verbose", dest="verbose", action="store_true",
                       help="Add this option to make server running verbose. "
                            "Without this option only errors will be logged.")
-    parser.add_option("-c", "--config", default="configuration.ini", help="Configuration file path")
+    parser.add_option("-c", "--config", default="config.ini", help="Configuration file path")
     (options, args) = parser.parse_args()
 
     return options
@@ -69,15 +80,15 @@ if __name__ == '__main__':
         with open(config_file_path) as f:
             config.read_file(f)
     except IOError as e:
-        logger.fatal("Configuration file '%s' could not be opened: %r" % (config_file_path, e))
+        logger.fatal("Configuration file '%s' could not be opened: %r\n" % (config_file_path, e) + config_error_string)
         sys.exit()
 
     # Check sections
     if 'MAIN' not in config:
-        logger.fatal("Error: configuration file does not have a [MAIN] section")
+        logger.fatal("Error: configuration file does not have a [MAIN] section\n" + config_error_string)
         sys.exit()
     if 'SERVER' not in config:
-        logger.fatal("Error: configuration file does not have a [SERVER] section")
+        logger.fatal("Error: configuration file does not have a [SERVER] section\n" + config_error_string)
         sys.exit()
 
     # Check required fields
@@ -88,8 +99,7 @@ if __name__ == '__main__':
     # Check other fields
     config_main_labels = ['manufacturer', 'manufacturer_url',
                           'model_description', 'model_name',
-                          'model_number', 'model_url', 'model_number',
-                          'presentation_url']
+                          'model_number', 'model_url', 'presentation_url']
     for label in config_main_labels:
         check_optional_field(config, logger, 'MAIN', label)
     config_server_labels = ['os', 'os_version']

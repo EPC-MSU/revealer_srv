@@ -124,8 +124,8 @@ class UPNPSSDPServer(SSDPServer):
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
                     continue
-                if ip.ip == "127.0.0.1":
-                    continue
+                #if ip.ip == "127.0.0.1":
+                    #continue
                 network = ipaddress.IPv4Network(ip.ip + "/" + str(ip.network_prefix), strict=False)
                 if ipaddress.ip_address(host_ip) in ipaddress.ip_network(network):
                     # For correct windows network search
@@ -185,8 +185,8 @@ class UPNPSSDPServer(SSDPServer):
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
                     continue
-                if ip.ip == '127.0.0.1':
-                    continue
+                #if ip.ip == '127.0.0.1':
+                    #continue
                 if ip.ip in bad_interfaces:
                     continue
 
@@ -239,4 +239,4 @@ class UPNPSSDPServer(SSDPServer):
             self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
             self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
         except (AttributeError, socket.error) as msg:
-            logger.warning("failure sending out NOTIFY response: %r" % msg)
+            logger.warning("Failure sending out NOTIFY response: %r" % msg)
