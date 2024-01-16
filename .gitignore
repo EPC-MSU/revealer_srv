@@ -2,5 +2,6 @@ build
 dist
 */__pycache__
 *.pyc
+.idea/*
 venv
 release
