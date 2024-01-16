@@ -11,7 +11,7 @@ python3 -m venv venv
 ./venv/bin/pyinstaller main.py --clean --onefile
 
 cp ./readme.md ./dist/readme.md
-cp ./configuration.ini ./dist/configuration.ini
+cp ./config.ini ./dist/config.ini
 mv dist release
 mv ./release/main ./release/revealer_srv
 rm -rf build
