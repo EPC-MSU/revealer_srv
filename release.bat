@@ -11,7 +11,7 @@ venv\Scripts\python -m pip install pyinstaller
 venv\Scripts\pyinstaller main.py --clean --onefile
 
 copy README.md dist
-copy configuration.ini dist
+copy config.ini dist
 rename dist release
 cd release
 rename main.exe revealer_srv.exe
