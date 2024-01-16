@@ -62,7 +62,7 @@ release.bat
 
 * Установите версию python3 с поддержкой виртуальных окружений, a также binutils для работы pyinstaller:
 ```bash
-sudo apt-get install python3.8-venv binutils
+sudo apt-get install python3-venv binutils
 ```
 * Для выпуска релиза в Linux нужно выполнить скрипт `release.sh`:
 ```bash
