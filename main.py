@@ -15,7 +15,7 @@ friendly_name = test
 product = name
 product_version = 1
 
-Optional MAIN fileds: manufacturer, manufacturer_url, model_description, model_name, model_number, model_url, presentation_url.
+Optional MAIN fields: manufacturer, manufacturer_url, model_description, model_name, model_number, model_url, presentation_url.
 Optional SERVER fields: os, os_version."""
 
 
