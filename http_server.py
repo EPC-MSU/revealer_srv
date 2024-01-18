@@ -88,7 +88,7 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(self.get_device_xml().encode())
             return
-        if self.path == '/index.html':
+        elif self.path == '/index.html':
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
@@ -100,7 +100,15 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html_page_404.encode())
             return
-            
+
+    def handle(self):
+        """Handle multiple requests if necessary."""
+
+        # TODO: set timeout of the request to 1 sec (?) maybe this should be modified
+        self.connection.settimeout(1)
+
+        BaseHTTPRequestHandler.handle(self)
+
     def get_index_html(self):
 
         return html_page_index.format(friendly_name=self.server.friendly_name,
