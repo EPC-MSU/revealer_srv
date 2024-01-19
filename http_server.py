@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 import threading
 from lib.ssdp import logger
 import sys
@@ -105,7 +106,7 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
         """Handle multiple requests if necessary."""
 
         # TODO: set timeout of the request to 1 sec (?) maybe this should be modified
-        self.connection.settimeout(1)
+        # self.connection.settimeout(1)
 
         BaseHTTPRequestHandler.handle(self)
 
@@ -156,7 +157,11 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
                           presentation_url=self.server.presentation_url)
 
 
-class UPNPHTTPServerBase(HTTPServer):
+class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
+    pass
+
+
+class UPNPHTTPServerBase(ThreadingSimpleServer):
     """
     A simple HTTP server that knows the information about a UPnP device.
     """

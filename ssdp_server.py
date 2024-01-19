@@ -152,8 +152,6 @@ class UPNPSSDPServer(SSDPServer):
                 continue
             if i['ST'] == headers['st'] or headers['st'] == 'ssdp:all':
 
-                print()
-                print()
                 logger.info('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
 
                 response = ['HTTP/1.1 200 OK']
