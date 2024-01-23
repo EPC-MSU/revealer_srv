@@ -14,7 +14,7 @@ copy README.md dist
 copy config.ini dist
 rename dist release
 cd release
-rename main.exe revealer_srv.exe
+rename main.exe pyssdp_server.exe
 
 cd ..
 if exist build rd /S /Q build

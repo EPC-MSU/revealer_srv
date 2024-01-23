@@ -1,5 +1,5 @@
 [Unit]
-Description=Revealer
+Description=PySSDP Server – UPnP SSDP discovery server
 After=network-online.target
 
 [Service]

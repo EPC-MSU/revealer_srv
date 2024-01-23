@@ -13,7 +13,7 @@ python3 -m venv venv
 cp ./readme.md ./dist/readme.md
 cp ./config.ini ./dist/config.ini
 mv dist release
-mv ./release/main ./release/revealer_srv
+mv ./release/main ./release/pyssdp_server
 rm -rf build
 rm -rf dist
 rm -rf venv

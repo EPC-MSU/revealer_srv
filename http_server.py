@@ -9,11 +9,11 @@ html_page_index = """
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Revealer Server</title>
+    <title>PySSDP Server</title>
   </head>
   <body>
     <h1>{friendly_name}</h1>
-    <p>This is default device web page provided by Revealer Server – UPnP SSDP discovery server.</p>
+    <p>This is default device web page provided by PySSDP Server – UPnP SSDP discovery server.</p>
     <p>In case you have alternative implementation of the device web page
     set correct URL in the discovery server configuration file.</p>
     <h2>Device information</h2>
@@ -68,7 +68,7 @@ html_page_404 = """
   </head>
   <body>
     <h1>404 - Page not found</h1>
-    <p>This page provided by Revealer Server – UPnP SSDP discovery server.</p>
+    <p>This page provided by PySSDP Server – UPnP SSDP discovery server.</p>
   </body>
 </html>
 """

@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
     options = parse_options()
 
-    print("Revealer friendly SSDP server: version {}".format(Version.full))
+    print("PySSDP Server version {}".format(Version.full))
 
     config_file_path = options.config
     http_port = 5050

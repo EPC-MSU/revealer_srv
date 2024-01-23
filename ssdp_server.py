@@ -174,7 +174,7 @@ class UPNPSSDPServer(SSDPServer):
 
                     self.send_it('\r\n'.join(response), (host, port), delay, usn)
 
-                    # NOTIFY - to make sure the response reaches Revealer
+                    # NOTIFY - to make sure the response reaches client
                     self.notify_from_all_interfaces(usn)
 
     def notify_from_all_interfaces(self, usn):
