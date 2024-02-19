@@ -1,4 +1,4 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import threading
 from lib.ssdp import logger
@@ -75,40 +75,39 @@ html_page_404 = """
 """
 
 
-class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
+class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
     """
     A HTTP handler that serves the UPnP XML files.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory="webroot", **kwargs)
+
     # Handler for the GET requests
+    # We override this method to be able to modify xml file
     def do_GET(self):
-
         if self.path == '/Basic_info.xml':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/xml')
-            self.end_headers()
-            self.wfile.write(self.get_device_xml().encode())
-            return
-        elif self.path == '/index.html':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(self.get_index_html().encode())
-            return
-        else:
-            self.send_response(404)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(html_page_404.encode())
-            return
+            try:
+                with open(self.directory + '/Basic_info.xml', "r") as f:
+                    text = f.read()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/xml')
+                self.end_headers()
+                self.wfile.write(self.get_device_xml(text).encode())
+                return
+            except Exception:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                return
 
-    def handle(self):
-        """Handle multiple requests if necessary."""
-
-        # TODO: set timeout of the request to 1 sec (?) maybe this should be modified
-        # self.connection.settimeout(1)
-
-        BaseHTTPRequestHandler.handle(self)
+        """Serve a GET request."""
+        f = self.send_head()
+        if f:
+            try:
+                self.copyfile(f, self.wfile)
+            finally:
+                f.close()
 
     def get_index_html(self):
 
@@ -122,30 +121,12 @@ class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
                                       serial_number=self.server.serial_number,
                                       uuid=self.server.uuid)
 
-    def get_device_xml(self):
+    def get_device_xml(self, text_file):
         """
         Get the main device descriptor xml file.
         """
-        xml = """<root>
-    <specVersion>
-        <major>1</major>
-        <minor>0</minor>
-    </specVersion>
-    <device>
-        <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-        <friendlyName>{friendly_name}</friendlyName>
-        <manufacturer>{manufacturer}</manufacturer>
-        <manufacturerURL>{manufacturer_url}</manufacturerURL>
-        <modelDescription>{model_description}</modelDescription>
-        <modelName>{model_name}</modelName>
-        <modelNumber>{model_number}</modelNumber>
-        <modelURL>{model_url}</modelURL>
-        <serialNumber>{serial_number}</serialNumber>
-        <UDN>uuid:{uuid}</UDN>
-        <presentationURL>{presentation_url}</presentationURL>
-    </device>
-</root>"""
-        return xml.format(friendly_name=self.server.friendly_name,
+
+        return text_file.format(friendly_name=self.server.friendly_name,
                           manufacturer=self.server.manufacturer,
                           manufacturer_url=self.server.manufacturer_url,
                           model_description=self.server.model_description,
@@ -161,7 +142,7 @@ class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
     pass
 
 
-class UPNPHTTPServerBase(ThreadingSimpleServer):
+class UPNPHTTPServerBase(ThreadingHTTPServer):
     """
     A simple HTTP server that knows the information about a UPnP device.
     """
