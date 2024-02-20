@@ -1,0 +1,19 @@
+<root>
+    <specVersion>
+        <major>1</major>
+        <minor>0</minor>
+    </specVersion>
+    <device>
+        <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
+        <friendlyName>{friendly_name}</friendlyName>
+        <manufacturer>{manufacturer}</manufacturer>
+        <manufacturerURL>{manufacturer_url}</manufacturerURL>
+        <modelDescription>{model_description}</modelDescription>
+        <modelName>{model_name}</modelName>
+        <modelNumber>{model_number}</modelNumber>
+        <modelURL>{model_url}</modelURL>
+        <serialNumber>{serial_number}</serialNumber>
+        <UDN>uuid:{uuid}</UDN>
+        <presentationURL>{presentation_url}</presentationURL>
+    </device>
+</root>
