@@ -1,4 +1,6 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
+import os
+
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import threading
 from lib.ssdp import logger
@@ -88,14 +90,17 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/Basic_info.xml':
             try:
-                with open(self.directory + '/Basic_info.xml', "r") as f:
+                path = os.path.join(self.directory, 'Basic_info.xml')
+                with open(path, "r") as f:
                     text = f.read()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/xml')
                 self.end_headers()
                 self.wfile.write(self.get_device_xml(text).encode())
                 return
-            except Exception:
+            except ConnectionResetError:
+                return
+            except FileNotFoundError:
                 self.send_response(404)
                 self.send_header('Content-type', 'text/html')
                 self.end_headers()
