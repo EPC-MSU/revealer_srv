@@ -3,7 +3,7 @@ Description=PySSDP Server – UPnP SSDP discovery server
 After=network-online.target
 
 [Service]
-WorkingDirectory=/home/eyepoint/Develop/server/
+WorkingDirectory=/usr/lib/pyssdp_server
 ExecStart=/usr/bin/python3 main.py
 
 [Install]
