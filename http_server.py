@@ -1,157 +1,104 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import os
+import sys
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http import HTTPStatus
+from socketserver import ThreadingMixIn
 import threading
 from lib.ssdp import logger
-import sys
 
 
-html_page_index = """
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>PySSDP Server</title>
-  </head>
-  <body>
-    <h1>{friendly_name}</h1>
-    <p>This is default device web page provided by PySSDP Server – UPnP SSDP discovery server.</p>
-    <p>In case you have alternative implementation of the device web page
-    set correct URL in the discovery server configuration file.</p>
-    <h2>Device information</h2>
-    <table>
-        <tr>
-            <td>Device name:</td>
-            <td>{friendly_name}</td>
-        </tr>
-        <tr>
-            <td>Serial number:</td>
-            <td>{serial_number}</td>
-        </tr>
-        <tr>
-            <td>UUID:</td>
-            <td>{uuid}</td>
-        </tr>
-        <tr>
-            <td>Manufacturer:</td>
-            <td>{manufacturer}</td>
-        </tr>
-        <tr>
-            <td>Manufacturer web-site:</td>
-            <td><a href={manufacturer_url}>{manufacturer_url}</a></td>
-        </tr>
-        <tr>
-            <td>Model name:</td>
-            <td>{model_name}</td>
-        </tr>
-        <tr>
-            <td>Model number:</td>
-            <td>{model_number}</td>
-        </tr>
-        <tr>
-            <td>Model description:</td>
-            <td>{model_description}</td>
-        </tr>
-        <tr>
-            <td>Model web-site:</td>
-            <td><a href={model_url}>{model_url}</a></td>
-        </tr>
-    </table>
-  </body>
-</html>
-"""
+class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
 
-html_page_404 = """
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>404 - Page not found</title>
-  </head>
-  <body>
-    <h1>404 - Page not found</h1>
-    <p>This page provided by PySSDP Server – UPnP SSDP discovery server.</p>
-  </body>
-</html>
-"""
-
-
-class UPNPHTTPServerHandler(BaseHTTPRequestHandler):
     """
     A HTTP handler that serves the UPnP XML files.
     """
 
+    def __init__(self, *args, directory="webroot", **kwargs):
+
+        if directory is None:
+            directory = os.getcwd()
+        self.directory = directory
+        self.python36 = False
+        try:
+            super().__init__(*args, directory=directory, **kwargs)
+        except TypeError:
+            self.python36 = True
+            # for compatibility with python 3.6
+            try:
+                super().__init__(*args, **kwargs)
+            except ConnectionResetError:
+                # try - except for windows requesting xml file while recalling network folder updating
+                pass
+        except ConnectionResetError:
+            # try - except for windows requesting xml file while recalling network folder updating
+            pass
+
+    # override method for specific directory handler in python 3.6
+    def translate_path(self, path):
+
+        path = super().translate_path(path)
+        if self.python36:
+            cur_path = os.getcwd()
+            add_path = path[len(cur_path):]
+            path = os.path.join(cur_path, self.directory) + add_path
+
+        return path
+
     # Handler for the GET requests
+    # We override this method to be able to modify xml file
     def do_GET(self):
-
         if self.path == '/Basic_info.xml':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/xml')
-            self.end_headers()
-            self.wfile.write(self.get_device_xml().encode())
-            return
-        if self.path == '/index.html':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(self.get_index_html().encode())
-            return
-        else:
-            self.send_response(404)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(html_page_404.encode())
-            return
-            
-    def get_index_html(self):
+            try:
+                path = os.path.join(self.directory, 'Basic_info.xml')
+                with open(path, "r") as f:
+                    text = f.read()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/xml')
+                self.end_headers()
+                self.wfile.write(self.get_device_xml(text).encode())
+                return
+            except ConnectionResetError:
+                return
+            except FileNotFoundError:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                return
 
-        return html_page_index.format(friendly_name=self.server.friendly_name,
-                                      manufacturer=self.server.manufacturer,
-                                      manufacturer_url=self.server.manufacturer_url,
-                                      model_name=self.server.model_name,
-                                      model_number=self.server.model_number,
-                                      model_description=self.server.model_description,
-                                      model_url=self.server.model_url,
-                                      serial_number=self.server.serial_number,
-                                      uuid=self.server.uuid)
+        """Serve a GET request."""
+        f = self.send_head()
+        if f:
+            try:
+                self.copyfile(f, self.wfile)
+            finally:
+                f.close()
 
-    def get_device_xml(self):
+    def get_device_xml(self, text_file):
         """
         Get the main device descriptor xml file.
         """
-        xml = """<root>
-    <specVersion>
-        <major>1</major>
-        <minor>0</minor>
-    </specVersion>
-    <device>
-        <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-        <friendlyName>{friendly_name}</friendlyName>
-        <manufacturer>{manufacturer}</manufacturer>
-        <manufacturerURL>{manufacturer_url}</manufacturerURL>
-        <modelDescription>{model_description}</modelDescription>
-        <modelName>{model_name}</modelName>
-        <modelNumber>{model_number}</modelNumber>
-        <modelURL>{model_url}</modelURL>
-        <serialNumber>{serial_number}</serialNumber>
-        <UDN>uuid:{uuid}</UDN>
-        <presentationURL>{presentation_url}</presentationURL>
-    </device>
-</root>"""
-        return xml.format(friendly_name=self.server.friendly_name,
-                          manufacturer=self.server.manufacturer,
-                          manufacturer_url=self.server.manufacturer_url,
-                          model_description=self.server.model_description,
-                          model_name=self.server.model_name,
-                          model_number=self.server.model_number,
-                          model_url=self.server.model_url,
-                          serial_number=self.server.serial_number,
-                          uuid=self.server.uuid,
-                          presentation_url=self.server.presentation_url)
+
+        return text_file.format(friendly_name=self.server.friendly_name,
+                                manufacturer=self.server.manufacturer,
+                                manufacturer_url=self.server.manufacturer_url,
+                                model_description=self.server.model_description,
+                                model_name=self.server.model_name,
+                                model_number=self.server.model_number,
+                                model_url=self.server.model_url,
+                                serial_number=self.server.serial_number,
+                                uuid=self.server.uuid,
+                                presentation_url=self.server.presentation_url)
 
 
-class UPNPHTTPServerBase(HTTPServer):
+class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
+    pass
+
+
+class UPNPHTTPServerBase(ThreadingSimpleServer):
     """
     A simple HTTP server that knows the information about a UPnP device.
     """
+
     def __init__(self, server_address, request_handler_class):
         try:
             HTTPServer.__init__(self, server_address, request_handler_class)

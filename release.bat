@@ -12,6 +12,8 @@ venv\Scripts\pyinstaller main.py --clean --onefile
 
 copy README.md dist
 copy config.ini dist
+mkdir dist\webroot
+copy webroot dist\webroot
 rename dist release
 cd release
 rename main.exe pyssdp_server.exe

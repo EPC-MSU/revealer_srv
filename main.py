@@ -1,5 +1,5 @@
 from ssdp_server import UPNPSSDPServer, logger
-from uuid import uuid4
+import uuid
 from http_server import UPNPHTTPServer
 import configparser
 import sys
@@ -73,7 +73,8 @@ if __name__ == '__main__':
         # if we should be quiet - set it to errors
         logger.setLevel(40)
 
-    device_uuid = uuid4()
+    # device_uuid = uuid4
+    device_uuid = uuid.UUID(int=uuid.getnode())
 
     config = configparser.ConfigParser(allow_no_value=True)
     try:
