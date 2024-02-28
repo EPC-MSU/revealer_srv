@@ -65,6 +65,39 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
 
+        if self.path == self.server.presentation_url:
+            try:
+                path = os.path.join(self.directory, self.server.presentation_url[1:])
+                if os.path.isdir(path):
+                    for index in "index.html", "index.htm":
+                        index = os.path.join(path, index)
+                        if os.path.exists(index):
+                            path = index
+                            break
+                with open(path, "r") as f:
+                    text = f.read()
+                if self.server.redirect_port is None or self.server.redirect_port == "":
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(text.encode())
+                else:
+                    ip_address = self.request.getsockname()[0]
+                    self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+                    self.send_header('Location',
+                                     'http://' + ip_address + ':' + str(
+                                         self.server.redirect_port) + self.server.presentation_url)
+                    self.end_headers()
+                return
+            except ConnectionResetError:
+                return
+            except FileNotFoundError:
+                print(f"File with path '{path}' not found.")
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                return
+
         """Serve a GET request."""
         f = self.send_head()
         if f:
@@ -116,6 +149,7 @@ class UPNPHTTPServerBase(ThreadingSimpleServer):
         self.serial_number = None
         self.uuid = None
         self.presentation_url = None
+        self.redirect_port = None
 
 
 class UPNPHTTPServer(threading.Thread):
@@ -124,7 +158,7 @@ class UPNPHTTPServer(threading.Thread):
     """
 
     def __init__(self, port, friendly_name, manufacturer, manufacturer_url, model_description, model_name,
-                 model_number, model_url, serial_number, uuid, presentation_url):
+                 model_number, model_url, serial_number, uuid, presentation_url, redirect_port=None):
         threading.Thread.__init__(self, daemon=True)
         self.server = UPNPHTTPServerBase(('0.0.0.0', port), UPNPHTTPServerHandler)
         self.server.port = port
@@ -138,6 +172,7 @@ class UPNPHTTPServer(threading.Thread):
         self.server.serial_number = serial_number
         self.server.uuid = uuid
         self.server.presentation_url = presentation_url
+        self.server.redirect_port = redirect_port
 
     def run(self):
         self.server.serve_forever()
