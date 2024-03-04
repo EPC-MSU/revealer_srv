@@ -97,15 +97,61 @@ release.bat
 
 ## Запуск скрипта на python
 
-Установить зависимости (см. requirements.txt) в виртуальное окружение, перейти в папку с файлом main.py и запустить скрипт:
-
 ### Запуск в Windows (из venv)
 
-```bash
+* из папки проекта создать виртуальное окружение:
+
+```
+python -m venv venv
+```
+
+* установить необходимые модуль в виртуальное окружение:
+
+```
+venv\Scripts\python -m pip install -r requirements.txt
+```
+
+* запустить сервер:
+
+```
 venv\Scripts\python main.py
 ```
 
 ### Запуск в Linux (из venv)
+
+* из папки проекта создать виртуальное окружение:
+
+```bash
+python3 -m venv venv
+```
+
+* установить необходимые модуль в виртуальное окружение:
+
+```bash
+venv/bin/python3 -m pip install -r requirements.txt
+```
+
+* запустить сервер:
+
+```bash
+venv/bin/python3 main.py
+```
+
+### Запуск в macOS (из venv)
+
+* из папки проекта создать виртуальное окружение:
+
+```bash
+python3 -m venv venv
+```
+
+* установить необходимые модуль в виртуальное окружение:
+
+```bash
+venv/bin/python3 -m pip install -r requirements.txt
+```
+
+* запустить сервер:
 
 ```bash
 venv/bin/python3 main.py
