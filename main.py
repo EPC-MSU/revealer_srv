@@ -122,6 +122,7 @@ if __name__ == '__main__':
                          'upnp:rootdevice',
                          '',  # will be set while constructing ssdp messages
                          server=server_data, location_port=http_port)
+
     while True:
         # try to create http server and start
         http_server = UPNPHTTPServer(http_port,
@@ -134,7 +135,8 @@ if __name__ == '__main__':
                                      config['MAIN']['model_url'],
                                      config['MAIN']['serial_number'],
                                      device_uuid,
-                                     config['MAIN']['presentation_url'])
+                                     config['MAIN']['presentation_url'],
+                                     redirect_port=config['MAIN']['presentation_port'])
         http_server.start()
         result = ssdp_server.run()
 
