@@ -169,6 +169,9 @@ class UPNPSSDPServer(SSDPServer):
                 if usn:
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
 
+                    # we need to make revealer know that we support changing network settings via multicast (MIPAS)
+                    response.append('MIPAS:')
+
                     response.extend(('', ''))
                     delay = random.randint(0, int(headers['mx']))
 
@@ -231,6 +234,7 @@ class UPNPSSDPServer(SSDPServer):
         del stcpy['last-seen']
 
         resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
+        resp.append("MIPAS:")
         resp.extend(('', ''))
         logger.debug('do_notify content', resp)
         try:
