@@ -116,7 +116,8 @@ if __name__ == '__main__':
     product_version = config['SERVER']['product_version']
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
 
-    ssdp_server = UPNPSSDPServer()
+    ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
+                                 password=config['SERVER']['password'])
     ssdp_server.register('local',
                          usn,
                          'upnp:rootdevice',
