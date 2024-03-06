@@ -54,6 +54,73 @@ class DeviceInterfaces:
             mac_address = getmac.get_mac_address(interface=name)
             adapter.hw_address = mac_address
 
+    def get_name_by_ip(self, ip_addr: str):
+        """
+
+        :return:
+        """
+
+        for adapter in self.adapters:
+            for ip in adapter.ips:
+                if not isinstance(ip.ip, str):
+                    # we don't need ipv6
+                    continue
+
+                if ip.ip == ip_addr:
+                    return adapter.name
+
+        # if we couldn't find any adapters with this ip...
+        return None
+
+    def get_uuid_by_ip(self, ip_addr: str):
+        """
+
+        :return:
+        """
+
+        name = self.get_name_by_ip(ip_addr=ip_addr)
+
+        if name is None:
+            return None
+
+        try:
+            uuid_name = self.mac_addresses_dict[name]['uuid']
+            return uuid_name
+        except KeyError:
+            return None
+
+    def get_ip_by_name(self, name: str):
+        """
+
+        :param name:
+        :return:
+        """
+        for adapter in self.adapters:
+            if name == adapter.name:
+                for ip in adapter.ips:
+                    if not isinstance(ip.ip, str):
+                        # we don't need ipv6
+                        continue
+
+                    return ip.ip
+
+        # if we couldn't find any adapters with this ip...
+        return None
+
+    def get_ip_by_uuid(self, device_uuid: str):
+        """
+
+        :return:
+        """
+
+        for name in self.mac_addresses_dict:
+            uuid_name = self.mac_addresses_dict[name]['uuid']
+            if uuid_name == device_uuid:
+                ip_addr = self.get_ip_by_name(name=name)
+                return ip_addr
+
+        return None
+
 
 class UPNPSSDPServer(SSDPServer):
     def __init__(self, change_settings_script_path='', password=''):
@@ -64,8 +131,6 @@ class UPNPSSDPServer(SSDPServer):
 
         self.adapters = ifaddr.get_adapters()
         self.interfaces = DeviceInterfaces()
-        for name in self.interfaces.mac_addresses_dict:
-            print(name, self.interfaces.mac_addresses_dict[name])
 
     def _setup_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -206,15 +271,33 @@ class UPNPSSDPServer(SSDPServer):
 
                 usn = None
                 uuid_st = None
+                device_ip = None
+                result = RESULT_OK
                 for k, v in i.items():
                     if k == 'USN':
                         usn = v
                         uuid_st = self.exctract_uuid_st_from_usn(usn=usn)
+                        device_uuid = uuid_st[5:].lower()
+                        self.interfaces.update()
+                        device_ip = self.interfaces.get_ip_by_uuid(device_uuid=device_uuid)
+
                     if k == 'LOCATION':
                         v = self._create_location_link(host_ip=host)
+                        continue
 
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
+
+                # create location link with found device ip from adapter list for this usn
+                if device_ip is not None:
+                    response.append('LOCATION: http://%s:%s/Basic_info.xml' % (device_ip, self.location_port))
+                    self.known[usn]['LOCATION'] = 'http://%s:%s/Basic_info.xml' % (device_ip, self.location_port)
+                else:
+                    # TODO: we don't need device without ip i think?
+                    continue
+
+                if device_ip in bad_interfaces:
+                    continue
 
                 # check if special uuid was requested
                 if not uuid_st or (headers['st'][0:5] == 'uuid:' and headers['st'] != uuid_st):
@@ -224,9 +307,10 @@ class UPNPSSDPServer(SSDPServer):
                     # we received discovery specifically for us - it may be our MIPAS request to change network settings
                     print(f"Received MIPAS!!!'{headers['mipas']}'")
                     print(self.parse_mipas_field(headers['mipas']))
-                    self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']), adapter=self.get_adapter_by_uuid_st(uuid_st=uuid_st))
+                    result = self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']),
+                                          adapter=self.get_adapter_by_uuid_st(uuid_st=uuid_st))
 
-                if usn:
+                if usn and result == RESULT_OK:
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
 
                     # we need to make revealer know that we support changing network settings via multicast (MIPAS)
@@ -238,16 +322,29 @@ class UPNPSSDPServer(SSDPServer):
                     self.send_it('\r\n'.join(response), (host, port), delay, usn)
 
                     # NOTIFY - to make sure the response reaches client
-                    self.notify_from_all_interfaces(usn)
+                    # self.notify_from_all_interfaces(usn)
+                    # self.do_notify(usn)
+                    self.do_notify_on_interface(usn, device_ip)
+
+    def do_notify_on_interface(self, usn, ip_addr):
+        if_addr = socket.inet_aton(ip_addr)
+        try:
+            self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, if_addr)
+            logger.info('Set interface to %s' % ip_addr)
+        except socket.error as msg:
+            logger.warn("Failure connecting to interface %s: %r" % (ip_addr, msg))
+            return
+
+        self.do_notify(usn)
 
     def notify_from_all_interfaces(self, usn):
         self.adapters = ifaddr.get_adapters()
         for adapter in self.adapters:
+
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
                     continue
-                #if ip.ip == '127.0.0.1':
-                    #continue
+
                 if ip.ip in bad_interfaces:
                     continue
 
@@ -344,6 +441,8 @@ class UPNPSSDPServer(SSDPServer):
         :return:
         """
 
+        print("Adapter:", adapter)
+
         # check password
         if netset["password"] == self.password:
             path = self.change_settings_script_path
@@ -361,7 +460,7 @@ class UPNPSSDPServer(SSDPServer):
         uuid_name = uuid_st[5:]
 
         for name in self.interfaces.mac_addresses_dict:
-            if self.interfaces.mac_addresses_dict[name]['uuid'] == uuid_st:
+            if self.interfaces.mac_addresses_dict[name]['uuid'] == uuid_name:
                 return name
 
         return 'None'
