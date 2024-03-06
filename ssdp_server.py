@@ -43,7 +43,7 @@ class DeviceInterfaces:
             else:
                 adapter.hw_address = mac_address
                 # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
-                uuid_name = uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address)
+                uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
             self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name}
 
     def update(self):
