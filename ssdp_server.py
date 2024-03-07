@@ -31,28 +31,43 @@ class DeviceInterfaces:
 
         for adapter in self.adapters:
             name = adapter.name
-            mac_address = getmac.get_mac_address(interface=name)
             # if we are on win system ifaddr return UUID of the adapter as its name so if mac-address is None - try
             # to get uuid from name itself
-            if mac_address is None:
-                if len(name[1:len(name)-1]) == 36 and system() == 'Windows':
-                    uuid_name = name[1:len(name)-1].lower()
-                    mac_address = uuid_name[24:36]
-                else:
-                    uuid_name = None
+            if len(name[1:len(name) - 1]) == 36 and system() == 'Windows':
+                uuid_name = name[1:len(name) - 1].lower()
+                mac_address = uuid_name[24:36]
             else:
-                adapter.hw_address = mac_address
-                # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
-                uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
+                mac_address = getmac.get_mac_address(interface=name)
+                if mac_address is None:
+                    uuid_name = None
+                else:
+                    adapter.hw_address = mac_address
+                    # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
+                    uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
+
             self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name}
 
     def update(self):
-        self.adapters = ifaddr.get_adapters()
+        self.adapters = ifaddr.get_adapters(include_unconfigured=True)
+        self.mac_addresses_dict = {}
 
         for adapter in self.adapters:
             name = adapter.name
-            mac_address = getmac.get_mac_address(interface=name)
-            adapter.hw_address = mac_address
+            # if we are on win system ifaddr return UUID of the adapter as its name so if mac-address is None - try
+            # to get uuid from name itself
+            if len(name[1:len(name) - 1]) == 36 and system() == 'Windows':
+                uuid_name = name[1:len(name) - 1].lower()
+                mac_address = uuid_name[24:36]
+            else:
+                mac_address = getmac.get_mac_address(interface=name)
+                if mac_address is None:
+                    uuid_name = None
+                else:
+                    adapter.hw_address = mac_address
+                    # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
+                    uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
+
+            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name}
 
     def get_name_by_ip(self, ip_addr: str):
         """
