@@ -322,10 +322,15 @@ class UPNPSSDPServer(SSDPServer):
                     # we received discovery specifically for us - it may be our MIPAS request to change network settings
                     print(f"Received MIPAS!!!'{headers['mipas']}'")
                     print(self.parse_mipas_field(headers['mipas']))
-                    result = self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']),
-                                          adapter=self.get_adapter_by_uuid_st(uuid_st=uuid_st))
+                    # check if path to net set script is valid
+                    if len(self.change_settings_script_path) > 0:
+                        result = self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']),
+                                                       adapter=self.get_adapter_by_uuid_st(uuid_st=uuid_st))
+                        print("result =", result)
+                    else:
+                        result = RESULT_ERROR
 
-                if usn and result == RESULT_OK:
+                if usn and result == RESULT_OK and device_ip != "127.0.0.1":
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
 
                     # we need to make revealer know that we support changing network settings via multicast (MIPAS)
@@ -456,20 +461,34 @@ class UPNPSSDPServer(SSDPServer):
         :return:
         """
 
-        print("Adapter:", adapter)
-
         # check password
         if netset["password"] == self.password:
-            path = self.change_settings_script_path
+            path = os.path.join(os.path.dirname(__file__), self.change_settings_script_path)
 
-            sp = subprocess.run([path, '-a', adapter, '-i', netset["ip-address"], '-d', netset["dhcp_enabled"],
-                                 '-n', netset["net-mask"], '-g', netset["gw-address"]])
-            return sp.returncode
+            try:
+                sp = subprocess.run([path, '--interface', adapter,
+                                     '--ipv4', netset["ip-address"],
+                                     '--dhcp', netset["dhcp_enabled"],
+                                     '--subnet_mask', netset["net-mask"],
+                                     '--gw', netset["gw-address"]])
+                return sp.returncode
+            except FileNotFoundError:
+                # try pass path to the script as absolute path
+                path = self.change_settings_script_path
+                try:
+                    sp = subprocess.run([path, '-a', adapter, '-i', netset["ip-address"], '-d', netset["dhcp_enabled"],
+                                         '-n', netset["net-mask"], '-g', netset["gw-address"]])
+                    return sp.returncode
+                except FileNotFoundError:
+                    logger.error("File of the networking setting script can't be found on path '{}'".format(path))
+                    return RESULT_ERROR
+
         else:
-            logger.warning("Password for changing network settings is incorrect.")
-            print("Password for changing network settings is incorrect.")
+            logger.error("Password for changing network settings is incorrect.")
             return RESULT_ERROR
 
+        return RESULT_ERROR
+        
     def get_adapter_by_uuid_st(self, uuid_st):
 
         uuid_name = uuid_st[5:]
