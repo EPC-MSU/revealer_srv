@@ -1,5 +1,5 @@
 from ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
-import uuid
+import logging
 from http_server import UPNPHTTPServer
 import configparser
 import sys
@@ -68,10 +68,10 @@ if __name__ == '__main__':
     time_after_error_sec = 3
     if options.verbose:
         # if verbose mode is requested - set logger level to info
-        logger.setLevel(20)
+        logger.setLevel(logging.DEBUG)
     else:
         # if we should be quiet - set it to errors
-        logger.setLevel(40)
+        logger.setLevel(logging.WARNING)
 
     # device_uuid = uuid4
     # device_uuid = uuid.UUID(int=uuid.getnode())
