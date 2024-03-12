@@ -180,6 +180,9 @@ class DeviceInterfaces:
 
 
 class UPNPSSDPServer(SSDPServer):
+    SSDP_MIPAS_RESULT_OK = "Accepted"
+    SSDP_MIPAS_RESULT_ERROR = "Rejected"
+
     def __init__(self, change_settings_script_path='', password=''):
         SSDPServer.__init__(self)
 
@@ -378,7 +381,10 @@ class UPNPSSDPServer(SSDPServer):
                         result = RESULT_ERROR
 
                     # after all the checkings - provide the answer to this request
-                    mipas_answer = str(result)
+                    if result == RESULT_OK:
+                        mipas_answer = self.SSDP_MIPAS_RESULT_OK
+                    else:
+                        mipas_answer = self.SSDP_MIPAS_RESULT_ERROR
 
                 if usn and device_ip != "127.0.0.1":
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
@@ -396,7 +402,7 @@ class UPNPSSDPServer(SSDPServer):
                     # self.do_notify(usn)
                     self.do_notify_on_interface(usn, device_ip)
 
-                    if mipas_answer == str(RESULT_OK):
+                    if mipas_answer == self.SSDP_MIPAS_RESULT_OK:
                         # run script for changing network settings AFTER sending the response to the revealer
                         # that settings are valid
                         logger.info("Starting the script fot changing network settings")
