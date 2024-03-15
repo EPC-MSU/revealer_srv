@@ -1,4 +1,7 @@
-from lib.ssdp import SSDPServer, logger
+import os
+import re
+from lib.ssdp import SSDPServer
+import logging
 import socket
 import random
 from platform import system
@@ -7,6 +10,11 @@ import ifaddr
 from errno import ENOPROTOOPT
 import sys
 import ipaddress
+# TODO: maybe we can do it without another external module?
+import getmac
+import uuid
+
+import subprocess
 
 SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
@@ -15,11 +23,174 @@ bad_interfaces = []
 RESULT_OK = 0
 RESULT_ERROR = 1
 
+NAMESPACE_PYSSDP_SERVER = uuid.UUID("714c3c93-8f5b-4034-a5c5-89d9e94e8a19")
+
+# regular expressions for checking network settings format
+NET_MASK_RE = "^(((255\\.){3}(252|248|240|224|192|128|0+))|((255\\.){2}(255|254|252|248|240|224|192|128|0+)\\.0)" \
+              "|((255\\.)(255|254|252|248|240|224|192|128|0+)(\\.0+){2})" \
+              "|((255|254|252|248|240|224|192|128|0+)(\\.0+){3}))$"
+IP_ADDRESS_RE = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$"
+FORBIDDEN_IP_ADDRESS_RANGES_RE = "^(0|127)\\."
+
+FORMAT = '[%(levelname)s/%(name)s:%(lineno)d] %(asctime)-15s %(message)s'
+DATEFMT = '[%d/%m/%Y %H:%M:%S]'
+logging.basicConfig(format=FORMAT, datefmt=DATEFMT)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+class DeviceInterfaces:
+
+    def __init__(self):
+        self.adapters = ifaddr.get_adapters(include_unconfigured=True)
+        self.mac_addresses_dict = {}
+
+        for adapter in self.adapters:
+            name = adapter.name
+            interface = None
+            uuid_name = None
+            mac_address = None
+
+            # if we are on win system ifaddr return UUID of the adapter as its name so if mac-address is None - try
+            # to get uuid from name itself
+            if len(name[1:len(name) - 1]) == 36 and system() == 'Windows':
+                uuid_name = name[1:len(name) - 1].lower()
+                mac_address = uuid_name[24:36]
+            else:
+                mac_address = getmac.get_mac_address(interface=name)
+                if mac_address is None:
+                    uuid_name = None
+                else:
+                    adapter.hw_address = mac_address
+                    # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
+                    uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
+
+            # also we need to get real interface name for windows - so get it from the ip dict
+            for ip in adapter.ips:
+                if not isinstance(ip.ip, str):
+                    # we don't need ipv6
+                    continue
+
+                print(name, ip.ip, ip.nice_name)
+
+                interface = ip.nice_name
+
+            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface}
+
+    def update(self):
+        self.adapters = ifaddr.get_adapters(include_unconfigured=True)
+        self.mac_addresses_dict = {}
+
+        for adapter in self.adapters:
+            name = adapter.name
+            interface = None
+            uuid_name = None
+            mac_address = None
+
+            # if we are on win system ifaddr return UUID of the adapter as its name so if mac-address is None - try
+            # to get uuid from name itself
+            if len(name[1:len(name) - 1]) == 36 and system() == 'Windows':
+                uuid_name = name[1:len(name) - 1].lower()
+                mac_address = uuid_name[24:36]
+            else:
+                mac_address = getmac.get_mac_address(interface=name)
+                if mac_address is None:
+                    uuid_name = None
+                else:
+                    adapter.hw_address = mac_address
+                    # uuid_name = uuid.UUID(int=int("0x" + mac_address.replace(":", ""), 16), version=4)
+                    uuid_name = str(uuid.uuid3(NAMESPACE_PYSSDP_SERVER, mac_address))
+
+            # also we need to get real interface name for windows - so get it from the ip dict
+            for ip in adapter.ips:
+                if not isinstance(ip.ip, str):
+                    # we don't need ipv6
+                    continue
+
+                interface = ip.nice_name
+
+            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface}
+
+    def get_name_by_ip(self, ip_addr: str):
+        """
+
+        :return:
+        """
+
+        for adapter in self.adapters:
+            for ip in adapter.ips:
+                if not isinstance(ip.ip, str):
+                    # we don't need ipv6
+                    continue
+
+                if ip.ip == ip_addr:
+                    return adapter.name
+
+        # if we couldn't find any adapters with this ip...
+        return None
+
+    def get_uuid_by_ip(self, ip_addr: str):
+        """
+
+        :return:
+        """
+
+        name = self.get_name_by_ip(ip_addr=ip_addr)
+
+        if name is None:
+            return None
+
+        try:
+            uuid_name = self.mac_addresses_dict[name]['uuid']
+            return uuid_name
+        except KeyError:
+            return None
+
+    def get_ip_by_name(self, name: str):
+        """
+
+        :param name:
+        :return:
+        """
+        for adapter in self.adapters:
+            if name == adapter.name:
+                for ip in adapter.ips:
+                    if not isinstance(ip.ip, str):
+                        # we don't need ipv6
+                        continue
+
+                    return ip.ip
+
+        # if we couldn't find any adapters with this ip...
+        return None
+
+    def get_ip_by_uuid(self, device_uuid: str):
+        """
+
+        :return:
+        """
+
+        for name in self.mac_addresses_dict:
+            uuid_name = self.mac_addresses_dict[name]['uuid']
+            if uuid_name == device_uuid:
+                ip_addr = self.get_ip_by_name(name=name)
+                return ip_addr
+
+        return None
+
 
 class UPNPSSDPServer(SSDPServer):
-    def __init__(self):
+    SSDP_MIPAS_RESULT_OK = "Accepted"
+    SSDP_MIPAS_RESULT_ERROR = "Rejected"
+
+    def __init__(self, change_settings_script_path='', password=''):
         SSDPServer.__init__(self)
+
+        self.change_settings_script_path = change_settings_script_path
+        self.password = password
+
         self.adapters = ifaddr.get_adapters()
+        self.interfaces = DeviceInterfaces()
 
     def _setup_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -50,7 +221,7 @@ class UPNPSSDPServer(SSDPServer):
             logger.info('Joined multicast on interface 0.0.0.0')
             return RESULT_OK
         except socket.error as msg:
-            logger.warn("Failed to join multicast on interface 0.0.0.0: %r" % msg)
+            logger.info("Failed to join multicast on interface 0.0.0.0: %r" % msg)
             return RESULT_ERROR
 
     def _setup_socket_non_linux(self):
@@ -72,13 +243,13 @@ class UPNPSSDPServer(SSDPServer):
                     self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, ssdp_addr + interface)
                     logger.info('Joined multicast on interface %s/%d' % (ip.ip, ip.network_prefix))
                 except socket.error as msg:
-                    logger.warn("Failed to join multicast on interface %s. This interface will be ignored. %r"
+                    logger.info("Failed to join multicast on interface %s. This interface will be ignored. %r"
                                 % (ip.ip, msg))
                     bad_interfaces.append(ip.ip)
                     continue
 
         if if_count == len(bad_interfaces):
-            logger.warn("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
+            logger.error("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
             return RESULT_ERROR
         else:
             # we joined multicast on at least one interface so return 0
@@ -124,8 +295,8 @@ class UPNPSSDPServer(SSDPServer):
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
                     continue
-                #if ip.ip == "127.0.0.1":
-                    #continue
+                # if ip.ip == "127.0.0.1":
+                # continue
                 network = ipaddress.IPv4Network(ip.ip + "/" + str(ip.network_prefix), strict=False)
                 if ipaddress.ip_address(host_ip) in ipaddress.ip_network(network):
                     # For correct windows network search
@@ -142,7 +313,12 @@ class UPNPSSDPServer(SSDPServer):
         (host, port) = host_port
 
         logger.debug('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
-        logger.debug('Discovery request for %s' % headers['st'])
+
+        device_uuid = self.known
+        # we need to provide answer to the revealer in response to the changing net setting request
+        # so if we will receive special line in the discovery request - this won't be an emply line but 0 - for valid
+        # setting and password; or 1 - for invalid settings or password
+        mipas_answer = ''
 
         # Do we know about this service?
         for i in self.known.values():
@@ -150,24 +326,71 @@ class UPNPSSDPServer(SSDPServer):
                 continue
             if headers['st'] == 'ssdp:all' and i['SILENT']:
                 continue
-            if i['ST'] == headers['st'] or headers['st'] == 'ssdp:all':
-
-                logger.info('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
+            if i['ST'] == headers['st'] or headers['st'] == 'ssdp:all' or headers['st'][0:5] == 'uuid:':
 
                 response = ['HTTP/1.1 200 OK']
 
                 usn = None
+                uuid_st = None
+                device_ip = None
+                result = RESULT_OK
                 for k, v in i.items():
                     if k == 'USN':
                         usn = v
+                        uuid_st = self.exctract_uuid_st_from_usn(usn=usn)
+                        device_uuid = uuid_st[5:].lower()
+                        self.interfaces.update()
+                        device_ip = self.interfaces.get_ip_by_uuid(device_uuid=device_uuid)
+
                     if k == 'LOCATION':
                         v = self._create_location_link(host_ip=host)
+                        continue
 
                     if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
                         response.append('%s: %s' % (k, v))
 
-                if usn:
+                # create location link with found device ip from adapter list for this usn
+                if device_ip is not None:
+                    response.append('LOCATION: http://%s:%s/Basic_info.xml' % (device_ip, self.location_port))
+                    self.known[usn]['LOCATION'] = 'http://%s:%s/Basic_info.xml' % (device_ip, self.location_port)
+                else:
+                    # TODO: we don't need device without ip i think?
+                    continue
+
+                if device_ip in bad_interfaces:
+                    continue
+
+                # check if special uuid was requested
+                if not uuid_st or (headers['st'][0:5] == 'uuid:' and headers['st'] != uuid_st):
+                    # send nothing
+                    continue
+                elif uuid_st is not None and headers['st'] == uuid_st:
+                    # we received discovery specifically for us - it may be our MIPAS request to change network settings
+                    # check that network settings and password are valid
+                    netset_dict = self.parse_mipas_field(headers['mipas'])
+                    result = self.check_mipas_format(netset=netset_dict)
+                    # check if path to net set script is valid
+                    if result == RESULT_OK:
+                        adapter_name = self.get_adapter_by_uuid_st(uuid_st=uuid_st)
+                        if adapter_name is not None:
+                            interface_name = self.interfaces.mac_addresses_dict[adapter_name]['interface_name']
+                        else:
+                            logger.error("Couldn't find interface name for UUID in the ST field: {uuid_st}.")
+                            result = RESULT_ERROR
+                    else:
+                        result = RESULT_ERROR
+
+                    # after all the checkings - provide the answer to this request
+                    if result == RESULT_OK:
+                        mipas_answer = self.SSDP_MIPAS_RESULT_OK
+                    else:
+                        mipas_answer = self.SSDP_MIPAS_RESULT_ERROR
+
+                if usn and device_ip != "127.0.0.1":
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
+
+                    # we need to make revealer know that we support changing network settings via multicast (MIPAS)
+                    response.append('MIPAS: %s' % mipas_answer)
 
                     response.extend(('', ''))
                     delay = random.randint(0, int(headers['mx']))
@@ -175,16 +398,36 @@ class UPNPSSDPServer(SSDPServer):
                     self.send_it('\r\n'.join(response), (host, port), delay, usn)
 
                     # NOTIFY - to make sure the response reaches client
-                    self.notify_from_all_interfaces(usn)
+                    # self.notify_from_all_interfaces(usn)
+                    # self.do_notify(usn)
+                    self.do_notify_on_interface(usn, device_ip)
+
+                    if mipas_answer == self.SSDP_MIPAS_RESULT_OK:
+                        # run script for changing network settings AFTER sending the response to the revealer
+                        # that settings are valid
+                        logger.info("Starting the script fot changing network settings")
+                        result = self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']),
+                                                       adapter=interface_name)
+
+    def do_notify_on_interface(self, usn, ip_addr):
+        if_addr = socket.inet_aton(ip_addr)
+        try:
+            self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, if_addr)
+            logger.info('Set interface to %s' % ip_addr)
+        except socket.error as msg:
+            logger.warning("Failure connecting to interface %s: %r" % (ip_addr, msg))
+            return
+
+        self.do_notify(usn)
 
     def notify_from_all_interfaces(self, usn):
         self.adapters = ifaddr.get_adapters()
         for adapter in self.adapters:
+
             for ip in adapter.ips:
                 if not isinstance(ip.ip, str):
                     continue
-                #if ip.ip == '127.0.0.1':
-                    #continue
+
                 if ip.ip in bad_interfaces:
                     continue
 
@@ -193,7 +436,7 @@ class UPNPSSDPServer(SSDPServer):
                     self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, if_addr)
                     logger.info('Set interface to %s' % ip.ip)
                 except socket.error as msg:
-                    logger.warn("Failure connecting to interface %s: %r" % (ip.ip, msg))
+                    logger.warning("Failure connecting to interface %s: %r" % (ip.ip, msg))
                     continue
 
                 # format: LOCATION: http://172.16.130.67:80/Basic_info.xml
@@ -231,6 +474,7 @@ class UPNPSSDPServer(SSDPServer):
         del stcpy['last-seen']
 
         resp.extend(map(lambda x: ': '.join(x), stcpy.items()))
+        resp.append("MIPAS:")
         resp.extend(('', ''))
         logger.debug('do_notify content', resp)
         try:
@@ -238,3 +482,149 @@ class UPNPSSDPServer(SSDPServer):
             self.sock.sendto('\r\n'.join(resp).encode(), (SSDP_ADDR, SSDP_PORT))
         except (AttributeError, socket.error) as msg:
             logger.warning("Failure sending out NOTIFY response: %r" % msg)
+
+    @staticmethod
+    def exctract_uuid_st_from_usn(usn):
+        """
+        Extract "uuid:{device-uuid}" line from USN field value with structure "uuid:{device-uuid}::upnp:rootdevice"
+        :param usn:
+        :return:
+        """
+
+        return usn[0:41]
+
+    @staticmethod
+    def check_format(string, re_format) -> bool:
+
+        ip_format = re.compile(re_format)
+
+        if ip_format.match(string) is not None:
+            return False
+        else:
+            return True
+
+    def check_mipas_format(self, netset: dict):
+
+        result = RESULT_OK
+        # check if path to the script is actually a path to the existing file
+        if not os.path.isfile(self.change_settings_script_path):
+            # maybe it is relative?
+            if not os.path.isfile(os.path.join(os.path.dirname(__file__), self.change_settings_script_path)):
+                # no we can't find it
+                logger.error(f"Can't find any script file on the mipas_script_path "
+                             f"= {self.change_settings_script_path} "
+                             f"nor on the absolute path"
+                             f" {os.path.join(os.path.dirname(__file__), self.change_settings_script_path)}.")
+                result = RESULT_ERROR
+        # check that dhcp_enabled flag is 1 or 0
+        if netset['dhcp_enabled'] != '1' and netset['dhcp_enabled'] != '0':
+            logger.error("Wrong format of the DHCP usage flag. It should"
+                         " be 0 or 1 but got {}".format(netset['dhcp_enabled']))
+        # check password
+        if netset["password"] != self.password:
+            logger.error("Password for changing network settings is incorrect.")
+            result = RESULT_ERROR
+        else:
+            if self.check_format(netset['ip-address'], IP_ADDRESS_RE):
+                warning_msg = "IP address {} format is incorrect.\nRequired format: #.#.#.#, where # stands for" \
+                              " a number from 0 to 255." \
+                              "\nExample: 192.168.1.1."
+                logger.error(warning_msg.format(netset['ip-address']))
+                result = RESULT_ERROR
+            else:
+                # check if ip address requested is from 0.x.x.x or 127.x.x.x subnets - we shouldn't set this ip address
+                # since this ranges are for "this" network
+                if not self.check_format(netset['ip-address'], FORBIDDEN_IP_ADDRESS_RANGES_RE):
+                    warning_msg = "IP address {} is from one of the forbidden not-routed ranges: 0.0.0.0/8 " \
+                                  "or 127.0.0.0/8 - " \
+                                  "it won't be applied since it will cause the lost of the server."
+                    logger.error(warning_msg.format(netset['ip-address']))
+                    result = RESULT_ERROR
+
+            if self.check_format(netset['netmask'], NET_MASK_RE):
+                warning_msg = "Network Mask {} format is incorrect.\nMost likely you need Network Mask 255.255.0.0 or " \
+                              "255.255.255.0.\nIf these aren't the mask you need, check " \
+                              "possible network mask values " \
+                              "on the Internet and insert it in the format of #.#.#.#."
+                logger.error(warning_msg.format(netset['netmask']))
+                result = RESULT_ERROR
+            if netset['gw-address'] != '0.0.0.0' and self.check_format(netset['gw-address'], IP_ADDRESS_RE):
+                warning_msg = "Gateway Address {} format is incorrect.\nRequired format: #.#.#.#, where # stands for" \
+                              " a number from 0 to 255." \
+                              "\nExample: 192.168.1.1."
+                logger.error(warning_msg.format(netset['gw-address']))
+                result = RESULT_ERROR
+
+        return result
+
+    @staticmethod
+    def parse_mipas_field(value):
+        """
+        MIPAS (multicast IP address setting) field parsing method.
+
+        It has structure:
+          {password};{dhcp_enabled};{ip-address};{netmask};{gateway-address};
+        :param value:
+        :return: netset: dict - dictionary with new requested settings
+        """
+
+        params = value.split(';')
+
+        if len(params) >= 5:
+            netset = {"password": params[0], "dhcp_enabled": params[1], "ip-address": params[2],
+                      "netmask": params[3], "gw-address": params[4]}
+            return netset
+        else:
+            logger.error("Incorrect MIPAS field structure: {}. "
+                         "It should be: '<password>;<dhcp_enabled>;<ip-address>;<netmask>;<gateway-address>;'".format(
+                         value))
+
+            return None
+
+    def set_net_settings(self, netset: dict, adapter: str):
+        """
+        Run shell or batch script to change network settings with new parameters.
+
+        :param netset: dict
+        :param adapter: str
+        :return:
+        """
+
+        # check password
+        if netset["password"] == self.password:
+            path = os.path.join(os.path.dirname(__file__), self.change_settings_script_path)
+
+            try:
+                sp = subprocess.run([path, '--interface', adapter,
+                                     '--ipv4', netset["ip-address"],
+                                     '--dhcp', netset["dhcp_enabled"],
+                                     '--netmask', netset["netmask"],
+                                     '--gateway', netset["gw-address"]])
+                return sp.returncode
+            except FileNotFoundError:
+                # try pass path to the script as absolute path
+                path = self.change_settings_script_path
+                try:
+                    sp = subprocess.run([path, '--interface', adapter,
+                                         '--ipv4', netset["ip-address"],
+                                         '--dhcp', netset["dhcp_enabled"],
+                                         '--netmask', netset["netmask"],
+                                         '--gateway', netset["gw-address"]])
+                    return sp.returncode
+                except FileNotFoundError:
+                    logger.error("File of the networking setting script can't be found on path '{}'".format(path))
+                    return RESULT_ERROR
+
+        else:
+            logger.error("Password for changing network settings is incorrect.")
+            return RESULT_ERROR
+
+    def get_adapter_by_uuid_st(self, uuid_st):
+
+        uuid_name = uuid_st[5:]
+
+        for name in self.interfaces.mac_addresses_dict:
+            if self.interfaces.mac_addresses_dict[name]['uuid'] == uuid_name:
+                return name
+
+        return None

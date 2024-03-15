@@ -1,5 +1,5 @@
-from ssdp_server import UPNPSSDPServer, logger
-import uuid
+from ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
+import logging
 from http_server import UPNPHTTPServer
 import configparser
 import sys
@@ -68,13 +68,13 @@ if __name__ == '__main__':
     time_after_error_sec = 3
     if options.verbose:
         # if verbose mode is requested - set logger level to info
-        logger.setLevel(20)
+        logger.setLevel(logging.DEBUG)
     else:
         # if we should be quiet - set it to errors
-        logger.setLevel(40)
+        logger.setLevel(logging.WARNING)
 
     # device_uuid = uuid4
-    device_uuid = uuid.UUID(int=uuid.getnode())
+    # device_uuid = uuid.UUID(int=uuid.getnode())
 
     config = configparser.ConfigParser(allow_no_value=True)
     try:
@@ -107,8 +107,6 @@ if __name__ == '__main__':
     for label in config_server_labels:
         check_optional_field(config, logger, 'SERVER', label)
 
-    usn = 'uuid:{}::upnp:rootdevice'.format(device_uuid)
-
     # format: SERVER: lwIP/1.4.1 UPnP/2.0 8SMC5-USB/4.7.7
     os = config['SERVER']['os']
     os_version = config['SERVER']['os_version']
@@ -116,14 +114,23 @@ if __name__ == '__main__':
     product_version = config['SERVER']['product_version']
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
 
-    ssdp_server = UPNPSSDPServer()
-    ssdp_server.register('local',
-                         usn,
-                         'upnp:rootdevice',
-                         '',  # will be set while constructing ssdp messages
-                         server=server_data, location_port=http_port)
+    ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
+                                 password=config['SERVER']['password'])
+
+    # register instance (ssdp-service) for every adapter
+    interfaces = DeviceInterfaces()
+    for if_name in interfaces.mac_addresses_dict:
+        uuid_name = interfaces.mac_addresses_dict[if_name]['uuid']
+        usn = 'uuid:{}::upnp:rootdevice'.format(uuid_name)
+        ssdp_server.register('local',
+                             usn,
+                             'upnp:rootdevice',
+                             '',  # will be set while constructing ssdp messages
+                             server=server_data, location_port=http_port)
 
     while True:
+        # update interfaces
+        interfaces.update()
         # try to create http server and start
         http_server = UPNPHTTPServer(http_port,
                                      config['MAIN']['friendly_name'],
@@ -134,8 +141,9 @@ if __name__ == '__main__':
                                      config['MAIN']['model_number'],
                                      config['MAIN']['model_url'],
                                      config['MAIN']['serial_number'],
-                                     device_uuid,
+                                     '',
                                      config['MAIN']['presentation_url'],
+                                     interfaces=interfaces,
                                      redirect_port=config['MAIN']['presentation_port'])
         http_server.start()
         result = ssdp_server.run()

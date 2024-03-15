@@ -52,10 +52,18 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
                 path = os.path.join(self.directory, 'Basic_info.xml')
                 with open(path, "r") as f:
                     text = f.read()
+                # try to find interface name with this ip and its uuid for correct xml-data
+                uuid_name = None
+                # self.server.interfaces.update()
+                uuid_name = self.server.interfaces.get_uuid_by_ip(ip_addr=self.request.getsockname()[0])
+                if uuid_name is None:
+                    self.server.interfaces.update()
+                    uuid_name = self.server.interfaces.get_uuid_by_ip(ip_addr=self.request.getsockname()[0])
+
                 self.send_response(200)
                 self.send_header('Content-type', 'application/xml')
                 self.end_headers()
-                self.wfile.write(self.get_device_xml(text).encode())
+                self.wfile.write(self.get_device_xml(text, uuid_name).encode())
                 return
             except ConnectionResetError:
                 return
@@ -106,10 +114,13 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
             finally:
                 f.close()
 
-    def get_device_xml(self, text_file):
+    def get_device_xml(self, text_file, device_uuid):
         """
         Get the main device descriptor xml file.
         """
+
+        if device_uuid is None:
+            device_uuid = "Undefined"
 
         return text_file.format(friendly_name=self.server.friendly_name,
                                 manufacturer=self.server.manufacturer,
@@ -119,7 +130,7 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
                                 model_number=self.server.model_number,
                                 model_url=self.server.model_url,
                                 serial_number=self.server.serial_number,
-                                uuid=self.server.uuid,
+                                uuid=device_uuid,
                                 presentation_url=self.server.presentation_url)
 
 
@@ -150,6 +161,7 @@ class UPNPHTTPServerBase(ThreadingSimpleServer):
         self.uuid = None
         self.presentation_url = None
         self.redirect_port = None
+        self.interfaces = None
 
 
 class UPNPHTTPServer(threading.Thread):
@@ -158,7 +170,7 @@ class UPNPHTTPServer(threading.Thread):
     """
 
     def __init__(self, port, friendly_name, manufacturer, manufacturer_url, model_description, model_name,
-                 model_number, model_url, serial_number, uuid, presentation_url, redirect_port=None):
+                 model_number, model_url, serial_number, uuid, presentation_url, interfaces, redirect_port=None):
         threading.Thread.__init__(self, daemon=True)
         self.server = UPNPHTTPServerBase(('0.0.0.0', port), UPNPHTTPServerHandler)
         self.server.port = port
@@ -173,6 +185,7 @@ class UPNPHTTPServer(threading.Thread):
         self.server.uuid = uuid
         self.server.presentation_url = presentation_url
         self.server.redirect_port = redirect_port
+        self.server.interfaces = interfaces
 
     def run(self):
         self.server.serve_forever()
