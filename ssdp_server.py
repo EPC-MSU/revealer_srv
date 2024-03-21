@@ -71,8 +71,6 @@ class DeviceInterfaces:
                     # we don't need ipv6
                     continue
 
-                print(name, ip.ip, ip.nice_name)
-
                 interface = ip.nice_name
 
             self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface}

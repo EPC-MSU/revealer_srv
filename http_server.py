@@ -75,16 +75,16 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
 
         if self.path == self.server.presentation_url:
             try:
-                path = os.path.join(self.directory, self.server.presentation_url[1:])
-                if os.path.isdir(path):
-                    for index in "index.html", "index.htm":
-                        index = os.path.join(path, index)
-                        if os.path.exists(index):
-                            path = index
-                            break
-                with open(path, "r") as f:
-                    text = f.read()
                 if self.server.redirect_port is None or self.server.redirect_port == "":
+                    path = os.path.join(self.directory, self.server.presentation_url[1:])
+                    if os.path.isdir(path):
+                        for index in "index.html", "index.htm":
+                            index = os.path.join(path, index)
+                            if os.path.exists(index):
+                                path = index
+                                break
+                    with open(path, "r") as f:
+                        text = f.read()
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
                     self.end_headers()
