@@ -1,4 +1,4 @@
-#!/bin/sh -u
+#!/bin/bash -u
 
 usage="Usage:
     $(basename "$0") [-h | --help] [--interface <interface> 
