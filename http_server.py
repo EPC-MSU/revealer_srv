@@ -135,6 +135,13 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
 
 
 class ThreadingSimpleServer(ThreadingMixIn, HTTPServer):
+    # we don't allow to reuse HTTP-port since this behaviour is not cross-platform
+    # on Windows: with allow_reuse_address = True
+    #             one can create multiple server instances and only first one will be active
+    # on Linux: with allow_reuse_address = True
+    #           one can't create multiple server instances
+    allow_reuse_address = False
+
     pass
 
 
