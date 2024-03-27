@@ -610,8 +610,24 @@ class UPNPSSDPServer(SSDPServer):
                                          '--gateway', netset["gw-address"]])
                     return sp.returncode
                 except FileNotFoundError:
-                    logger.error("File of the networking setting script can't be found on path '{}'".format(path))
+                    logger.error("File of the network setting script can't be found on path '{}'".format(path))
                     return RESULT_ERROR
+                except PermissionError:
+                    logger.error("Script for network setting on path {} can't be executed"
+                                 " due to permission error. Check that the script has executable rights.".format(path))
+                    return RESULT_ERROR
+                except Exception as err:
+                    logger.error("Something went wrong while execution of the network setting script on path {}."
+                                 " Error: {}.".format(path, err))
+                    return RESULT_ERROR
+            except PermissionError:
+                logger.error("Script for network setting on path {} can't be executed"
+                             " due to permission error. Check that the script has executable rights.".format(path))
+                return RESULT_ERROR
+            except Exception as err:
+                logger.error("Something went wrong while execution of the network setting script on path {}."
+                             " Error: {}.".format(path, err))
+                return RESULT_ERROR
 
         else:
             logger.error("Password for changing network settings is incorrect.")
