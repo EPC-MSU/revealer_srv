@@ -30,7 +30,10 @@ NET_MASK_RE = "^(((255\\.){3}(252|248|240|224|192|128|0+))|((255\\.){2}(255|254|
               "|((255\\.)(255|254|252|248|240|224|192|128|0+)(\\.0+){2})" \
               "|((255|254|252|248|240|224|192|128|0+)(\\.0+){3}))$"
 IP_ADDRESS_RE = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$"
-FORBIDDEN_IP_ADDRESS_RANGES_RE = "^(0|127)\\."
+# we should check if the IP address is in the valid IP addresses ranges since localhost or 0.0.0.0/8 addresses
+# is not routed according to RFC to other hosts so we won't be able to see our devices with this addresses
+# also multicast address 224.0.0.0/4 can make device unreachable so we forbid them as well
+FORBIDDEN_IP_ADDRESS_RANGES_RE = "^(0|127|224|225|226|227|228|229|230|231|232|233|234|235|236|237|238|239)\\."
 
 FORMAT = '[%(levelname)s/%(name)s:%(lineno)d] %(asctime)-15s %(message)s'
 DATEFMT = '[%d/%m/%Y %H:%M:%S]'
@@ -534,7 +537,7 @@ class UPNPSSDPServer(SSDPServer):
                 # since this ranges are for "this" network
                 if not self.check_format(netset['ip-address'], FORBIDDEN_IP_ADDRESS_RANGES_RE):
                     warning_msg = "IP address {} is from one of the forbidden not-routed ranges: 0.0.0.0/8 " \
-                                  "or 127.0.0.0/8 - " \
+                                  "or 127.0.0.0/8 or 224.0.0.0/4 (reserved for multicast) - " \
                                   "it won't be applied since it will cause the lost of the server."
                     logger.error(warning_msg.format(netset['ip-address']))
                     result = RESULT_ERROR
