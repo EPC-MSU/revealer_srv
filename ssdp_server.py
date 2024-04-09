@@ -267,7 +267,7 @@ class UPNPSSDPServer(SSDPServer):
         try:
             self.sock.bind(('', SSDP_PORT))
         except OSError as e:
-            logger.fatal("""Error creating ssdp server on port %d. Please check that the port is not in use: %r"""
+            logger.fatal("Error creating ssdp server on port %d. Please check that the port is not in use: %r"
                          % (SSDP_PORT, e))
             sys.exit()
         self.sock.settimeout(1)
@@ -277,6 +277,10 @@ class UPNPSSDPServer(SSDPServer):
                 data, addr = self.sock.recvfrom(1024)
                 self.datagram_received(data, addr)
             except socket.timeout:
+                continue
+            except Exception as err:
+                # if we get unknown error - we shouldn't stop our working
+                logger.error("Error occured in SSDP server working: {}".format(err))
                 continue
         self.shutdown()
         return RESULT_ERROR
@@ -368,24 +372,28 @@ class UPNPSSDPServer(SSDPServer):
                 elif uuid_st is not None and headers['st'] == uuid_st:
                     # we received discovery specifically for us - it may be our MIPAS request to change network settings
                     # check that network settings and password are valid
-                    netset_dict = self.parse_mipas_field(headers['mipas'])
-                    result = self.check_mipas_format(netset=netset_dict)
-                    # check if path to net set script is valid
-                    if result == RESULT_OK:
-                        adapter_name = self.get_adapter_by_uuid_st(uuid_st=uuid_st)
-                        if adapter_name is not None:
-                            interface_name = self.interfaces.mac_addresses_dict[adapter_name]['interface_name']
+                    try:
+                        netset_dict = self.parse_mipas_field(headers['mipas'])
+                        result = self.check_mipas_format(netset=netset_dict)
+                        # check if path to net set script is valid
+                        if result == RESULT_OK:
+                            adapter_name = self.get_adapter_by_uuid_st(uuid_st=uuid_st)
+                            if adapter_name is not None:
+                                interface_name = self.interfaces.mac_addresses_dict[adapter_name]['interface_name']
+                            else:
+                                logger.error(f"Couldn't find interface name for UUID in the ST field: {uuid_st}.")
+                                result = RESULT_ERROR
                         else:
-                            logger.error("Couldn't find interface name for UUID in the ST field: {uuid_st}.")
                             result = RESULT_ERROR
-                    else:
-                        result = RESULT_ERROR
 
-                    # after all the checkings - provide the answer to this request
-                    if result == RESULT_OK:
-                        mipas_answer = self.SSDP_MIPAS_RESULT_OK
-                    else:
-                        mipas_answer = self.SSDP_MIPAS_RESULT_ERROR
+                        # after all the checkings - provide the answer to this request
+                        if result == RESULT_OK:
+                            mipas_answer = self.SSDP_MIPAS_RESULT_OK
+                        else:
+                            mipas_answer = self.SSDP_MIPAS_RESULT_ERROR
+                    except KeyError:
+                        logger.debug(f"Request doesn't have MIPAS field from the enhanced SSDP for "
+                                     f"changing network so we need to answer to the discovery request as usual.")
 
                 if usn and device_ip != "127.0.0.1":
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
