@@ -372,7 +372,7 @@ class UPNPSSDPServer(SSDPServer):
                 elif uuid_st is not None and headers['st'] == uuid_st:
                     # we received discovery specifically for us - it may be our MIPAS request to change network settings
                     # check that network settings and password are valid
-                    try:
+                    if 'mipas' in headers:
                         netset_dict = self.parse_mipas_field(headers['mipas'])
                         result = self.check_mipas_format(netset=netset_dict)
                         # check if path to net set script is valid
@@ -391,9 +391,10 @@ class UPNPSSDPServer(SSDPServer):
                             mipas_answer = self.SSDP_MIPAS_RESULT_OK
                         else:
                             mipas_answer = self.SSDP_MIPAS_RESULT_ERROR
-                    except KeyError:
-                        logger.debug(f"Request doesn't have MIPAS field from the enhanced SSDP for "
-                                     f"changing network so we need to answer to the discovery request as usual.")
+                    else:
+                        # if this was a simple search request by this device uuid (without MIPAS field)
+                        # we will answer to it normally
+                        pass
 
                 if usn and device_ip != "127.0.0.1":
                     response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
