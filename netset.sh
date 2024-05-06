@@ -1,4 +1,4 @@
-#!/bin/bash -u
+#!/bin/bash
 
 usage="Usage:
     $(basename "$0") [-h | --help] [--interface <interface> 
@@ -63,3 +63,97 @@ echo "interface=$interface ipv4=$ipv4 netmask=$netmask dhcp=$dhcp gateway=$gatew
 
 # TODO: add network setting function here
 
+
+if [ "$USER" != "root" ]
+  then
+   echo "Can't run network update script. Must be root."
+  exit 1
+fi
+
+function ConvertNetmask ()
+{
+  PARAMS=${netmask}
+  BARRAY=({0..1}{0..1}{0..1}{0..1}{0..1}{0..1}{0..1}{0..1})
+  NETMASK=${PARAMS#* }
+  NETMASK=${NETMASK//./ }
+  BINARY_NETMASK=$(for octet in $NETMASK; do echo -n ${BARRAY[octet]}" "; done)
+  BIN_MASK_SEP1=${BINARY_NETMASK//1/1 }
+  BINARY_MASK_ARRAY=( ${BIN_MASK_SEP1//0/0 } )
+  BITS_COUNT=0
+  for i in ${BINARY_MASK_ARRAY[@]}
+  do
+    [ "$i" == "1" ] && BITS_COUNT=$((BITS_COUNT + 1))
+  done
+  BITMASK=${BITS_COUNT}
+}
+
+function SetDynamicIP ()
+{
+  # Remove "default" route
+  ip route flush default
+
+  # Remove IPv4 address
+  ip -4 addr flush dev ${interface}
+
+  # Setup IPv4 dynamic address
+  dhclient -4 ${interface}
+}
+
+function SetStaticIP ()
+{
+  # Remove "default" route
+  #ip route del default
+  ip route flush default
+
+  # Remove IPv4 address
+  ip addr flush dev ${interface}
+
+  # Setup IPv4 static address
+  ip addr add ${ipv4}/${netmask} dev ${interface}
+
+  # Add default route
+  ip route add default dev ${interface} via ${gateway}
+#  exit 0
+}
+
+function AddStaticConfigNetplan ()
+{
+  rm -f /etc/netplan/*
+
+cat << EOF >> /etc/netplan/networkd-manager-${interface}.yaml
+network:
+  version: 2
+  ethernets:
+    ${interface}:
+      dhcp4: no
+      dhcp6: no
+      addresses: [ ${ipv4}/${BITMASK} ]
+      gateway4: ${gateway}
+EOF
+}
+
+function AddDynamicConfigNetplan ()
+{
+  rm -f /etc/netplan/*
+
+cat << EOF >> /etc/netplan/networkd-manager-${interface}.yaml
+network:
+  version: 2
+  ethernets:
+    ${interface}:
+      dhcp4: true
+EOF
+}
+
+if [[ "${dhcp}" == "1" ]]
+  then
+    SetDynamicIP
+    AddDynamicConfigNetplan
+  else
+    if [[ "${dhcp}" == "0" ]]
+      then
+        ConvertNetmask
+        SetStaticIP
+        AddStaticConfigNetplan
+    fi
+fi
