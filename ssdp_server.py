@@ -248,8 +248,9 @@ class UPNPSSDPServer(SSDPServer):
         self.bad_interfaces = []
 
         if system() == 'Linux':
-            result = self._drop_membership_socket_on_linux()
-            result = self._setup_socket_on_linux()
+            # do same thing for linux and non-linux systems to iterate through all interfaces on each system
+            result = self._drop_membership_socket_non_linux()
+            result = self._setup_socket_non_linux()
         else:
             result = self._drop_membership_socket_non_linux()
             result = self._setup_socket_non_linux()
@@ -283,6 +284,7 @@ class UPNPSSDPServer(SSDPServer):
     def _setup_socket_non_linux(self):
         logger.info("Not a Linux system. Joining multicast on all interfaces")
         if_count = 0
+        good_interfaces = []
         # self.adapters = ifaddr.get_adapters()
         # for adapter in self.adapters:
         for name in self.interfaces.mac_addresses_dict:
@@ -304,12 +306,20 @@ class UPNPSSDPServer(SSDPServer):
                             self.interfaces.mac_addresses_dict[name]['interface_name'], ip
                         ))
                         self.good_interfaces.append(self.interfaces.mac_addresses_dict[name])
+                    good_interfaces.append(self.interfaces.mac_addresses_dict[name])
                 except socket.error as msg:
                     logger.debug('Failed to join multicast on interface "%s" with IPv4 = %s.'
                                    ' This interface will be ignored. %r' % (
                         self.interfaces.mac_addresses_dict[name]['interface_name'], ip, msg
                     ))
                     self.bad_interfaces.append(ip)
+
+        # check that all interfaces from self.good_interfaces is in the good_interfaces for this time
+        # if some interfaces is absent - we lost it
+        for if_dict in self.good_interfaces:
+            if if_dict not in good_interfaces:
+                logger.warning(f"Dropped multicast on interface \"%s\"." % (if_dict['interface_name']))
+                self.good_interfaces.remove(if_dict)
 
         if if_count == len(self.bad_interfaces):
             logger.error("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
@@ -320,7 +330,6 @@ class UPNPSSDPServer(SSDPServer):
 
     def _drop_membership_socket_non_linux(self):
         logger.debug(f"Not a Linux system. Dropping multicast on all interfaces.")
-        removed_if = []
         for good_if in self.good_interfaces:
             for ip in good_if["ips"]:
                 if not isinstance(ip, str):
@@ -337,12 +346,8 @@ class UPNPSSDPServer(SSDPServer):
                         good_if['interface_name'], ip
                     ))
                 except socket.error as msg:
-                    logger.warning(f"Lost interface \"%s\" with IPv4 %s." % (
+                    logger.debug(f"Lost interface \"%s\" with IPv4 %s." % (
                                        good_if['interface_name'], ip))
-                    removed_if.append(good_if)
-
-        for dropped_if in removed_if:
-            self.good_interfaces.remove(dropped_if)
 
         return RESULT_OK
 
