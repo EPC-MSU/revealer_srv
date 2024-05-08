@@ -119,14 +119,7 @@ if __name__ == '__main__':
 
     # register instance (ssdp-service) for every adapter
     interfaces = DeviceInterfaces()
-    for if_name in interfaces.mac_addresses_dict:
-        uuid_name = interfaces.mac_addresses_dict[if_name]['uuid']
-        usn = 'uuid:{}::upnp:rootdevice'.format(uuid_name)
-        ssdp_server.register('local',
-                             usn,
-                             'upnp:rootdevice',
-                             '',  # will be set while constructing ssdp messages
-                             server=server_data, location_port=http_port)
+    ssdp_server.register_all_interfaces(server=server_data, location_port=http_port)
 
     while True:
         # update interfaces

@@ -18,7 +18,6 @@ import subprocess
 
 SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
-bad_interfaces = []
 
 RESULT_OK = 0
 RESULT_ERROR = 1
@@ -51,6 +50,7 @@ class DeviceInterfaces:
         for adapter in self.adapters:
             name = adapter.name
             interface = None
+            ips_array = []
             uuid_name = None
             mac_address = None
 
@@ -74,17 +74,26 @@ class DeviceInterfaces:
                     # we don't need ipv6
                     continue
 
+                ips_array.append(ip.ip)
+
                 interface = ip.nice_name
 
-            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface}
+            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface, "ips": ips_array}
 
     def update(self):
-        self.adapters = ifaddr.get_adapters(include_unconfigured=True)
-        self.mac_addresses_dict = {}
+
+        adapters = ifaddr.get_adapters(include_unconfigured=True)
+
+        self.adapters = adapters
+
+        # self.mac_addresses_dict = {}
+
+        mac_addresses_dict = {}
 
         for adapter in self.adapters:
             name = adapter.name
             interface = None
+            ips_array = []
             uuid_name = None
             mac_address = None
 
@@ -108,9 +117,23 @@ class DeviceInterfaces:
                     # we don't need ipv6
                     continue
 
+                ips_array.append(ip.ip)
+
                 interface = ip.nice_name
 
-            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface}
+            mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface, "ips": ips_array}
+
+        # after everything is done - check if the list has changed. If yes - return True as the indication flag that
+        # interfaces was changed
+        #for name in mac_addresses_dict:
+        if mac_addresses_dict == self.mac_addresses_dict:
+            return False
+        else:
+            logger.debug("Something has changed in the interfaces list.")
+        self.mac_addresses_dict = mac_addresses_dict
+
+        logger.debug(f"List of the interfaces is updated. self.mac_addresses_dict = {self.mac_addresses_dict}")
+        return True
 
     def get_name_by_ip(self, ip_addr: str):
         """
@@ -187,6 +210,9 @@ class UPNPSSDPServer(SSDPServer):
     def __init__(self, change_settings_script_path='', password=''):
         SSDPServer.__init__(self)
 
+        self.bad_interfaces = []
+        self.good_interfaces = []
+
         self.change_settings_script_path = change_settings_script_path
         self.password = password
 
@@ -213,6 +239,23 @@ class UPNPSSDPServer(SSDPServer):
 
         return result
 
+    def _update_socket(self):
+        """
+        Update socket with new interfaces configuration.
+        :return:
+        """
+
+        self.bad_interfaces = []
+
+        if system() == 'Linux':
+            result = self._drop_membership_socket_on_linux()
+            result = self._setup_socket_on_linux()
+        else:
+            result = self._drop_membership_socket_non_linux()
+            result = self._setup_socket_non_linux()
+
+        return result
+
     def _setup_socket_on_linux(self):
         logger.info("Linux system. Will try to join multicast on interface 0.0.0.0")
         interface = socket.inet_aton('0.0.0.0')
@@ -225,36 +268,105 @@ class UPNPSSDPServer(SSDPServer):
             logger.info("Failed to join multicast on interface 0.0.0.0: %r" % msg)
             return RESULT_ERROR
 
+    def _drop_membership_socket_on_linux(self):
+        logger.info("Linux system. Will try to join multicast on interface 0.0.0.0")
+        interface = socket.inet_aton('0.0.0.0')
+        try:
+            ssdp_addr = socket.inet_aton(SSDP_ADDR)
+            self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, ssdp_addr + interface)
+            logger.info('Dropped multicast on interface 0.0.0.0')
+            return RESULT_OK
+        except socket.error as msg:
+            logger.info("Failed to drop multicast on interface 0.0.0.0: %r" % msg)
+            return RESULT_ERROR
+
     def _setup_socket_non_linux(self):
         logger.info("Not a Linux system. Joining multicast on all interfaces")
         if_count = 0
-        self.adapters = ifaddr.get_adapters()
-        for adapter in self.adapters:
-            for ip in adapter.ips:
-                if not isinstance(ip.ip, str):
+        # self.adapters = ifaddr.get_adapters()
+        # for adapter in self.adapters:
+        for name in self.interfaces.mac_addresses_dict:
+            for ip in self.interfaces.mac_addresses_dict[name]["ips"]:
+                if not isinstance(ip, str):
                     continue
 
-                if ip.ip == '127.0.0.1':
+                if ip == '127.0.0.1':
                     continue
 
                 if_count += 1
-                interface = socket.inet_aton(ip.ip)
+                interface = socket.inet_aton(ip)
                 try:
                     ssdp_addr = socket.inet_aton(SSDP_ADDR)
                     self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, ssdp_addr + interface)
-                    logger.info('Joined multicast on interface %s/%d' % (ip.ip, ip.network_prefix))
-                except socket.error as msg:
-                    logger.info("Failed to join multicast on interface %s. This interface will be ignored. %r"
-                                % (ip.ip, msg))
-                    bad_interfaces.append(ip.ip)
-                    continue
 
-        if if_count == len(bad_interfaces):
+                    if self.interfaces.mac_addresses_dict[name] not in self.good_interfaces:
+                        logger.warning('Joined multicast on interface "%s" with IPv4 = %s' % (
+                            self.interfaces.mac_addresses_dict[name]['interface_name'], ip
+                        ))
+                        self.good_interfaces.append(self.interfaces.mac_addresses_dict[name])
+                except socket.error as msg:
+                    logger.debug('Failed to join multicast on interface "%s" with IPv4 = %s.'
+                                   ' This interface will be ignored. %r' % (
+                        self.interfaces.mac_addresses_dict[name]['interface_name'], ip, msg
+                    ))
+                    self.bad_interfaces.append(ip)
+
+        if if_count == len(self.bad_interfaces):
             logger.error("Failed to join multicast on all interfaces. Server won't be able to send NOTIFY messages.")
             return RESULT_ERROR
         else:
             # we joined multicast on at least one interface so return 0
             return RESULT_OK
+
+    def _drop_membership_socket_non_linux(self):
+        logger.debug(f"Not a Linux system. Dropping multicast on all interfaces.")
+        removed_if = []
+        for good_if in self.good_interfaces:
+            for ip in good_if["ips"]:
+                if not isinstance(ip, str):
+                    continue
+
+                if ip == '127.0.0.1':
+                    continue
+
+                interface = socket.inet_aton(ip)
+                try:
+                    ssdp_addr = socket.inet_aton(SSDP_ADDR)
+                    self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, ssdp_addr + interface)
+                    logger.debug('Dropped multicast on interface \"%s\" with IPv4: %s' % (
+                        good_if['interface_name'], ip
+                    ))
+                except socket.error as msg:
+                    logger.warning(f"Lost interface \"%s\" with IPv4 %s." % (
+                                       good_if['interface_name'], ip))
+                    removed_if.append(good_if)
+
+        for dropped_if in removed_if:
+            self.good_interfaces.remove(dropped_if)
+
+        return RESULT_OK
+
+    def register_all_interfaces(self, server=None, location_port=None):
+        """
+        Register all adapters from the list. If this method is recalled after start of the server - it will delete
+        previously saved services and register them again.
+
+        :return:
+        """
+
+        self.known = {}
+
+        if server is not None:
+            self.server_data = server
+        if location_port is not None:
+            self.location_port = location_port
+
+        for if_name in self.interfaces.mac_addresses_dict:
+            uuid_name = self.interfaces.mac_addresses_dict[if_name]['uuid']
+            usn = 'uuid:{}::upnp:rootdevice'.format(uuid_name)
+            self.register('local', usn, 'upnp:rootdevice',
+                          '',  # will be set while constructing ssdp messages
+                          server=self.server_data, location_port=self.location_port)
 
     def run(self):
 
@@ -319,7 +431,6 @@ class UPNPSSDPServer(SSDPServer):
 
         logger.debug('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
 
-        device_uuid = self.known
         # we need to provide answer to the revealer in response to the changing net setting request
         # so if we will receive special line in the discovery request - this won't be an emply line but 0 - for valid
         # setting and password; or 1 - for invalid settings or password
@@ -344,7 +455,10 @@ class UPNPSSDPServer(SSDPServer):
                         usn = v
                         uuid_st = self.exctract_uuid_st_from_usn(usn=usn)
                         device_uuid = uuid_st[5:].lower()
-                        self.interfaces.update()
+                        if self.interfaces.update():
+                            # if something changed in the interface list - update socket configuration
+                            self._update_socket()
+                            self.register_all_interfaces()
                         device_ip = self.interfaces.get_ip_by_uuid(device_uuid=device_uuid)
 
                     if k == 'LOCATION':
@@ -362,7 +476,7 @@ class UPNPSSDPServer(SSDPServer):
                     # TODO: we don't need device without ip i think?
                     continue
 
-                if device_ip in bad_interfaces:
+                if device_ip in self.bad_interfaces:
                     continue
 
                 # check if special uuid was requested
@@ -408,8 +522,6 @@ class UPNPSSDPServer(SSDPServer):
                     self.send_it('\r\n'.join(response), (host, port), delay, usn)
 
                     # NOTIFY - to make sure the response reaches client
-                    # self.notify_from_all_interfaces(usn)
-                    # self.do_notify(usn)
                     self.do_notify_on_interface(usn, device_ip)
 
                     if mipas_answer == self.SSDP_MIPAS_RESULT_OK:
@@ -429,31 +541,6 @@ class UPNPSSDPServer(SSDPServer):
             return
 
         self.do_notify(usn)
-
-    def notify_from_all_interfaces(self, usn):
-        self.adapters = ifaddr.get_adapters()
-        for adapter in self.adapters:
-
-            for ip in adapter.ips:
-                if not isinstance(ip.ip, str):
-                    continue
-
-                if ip.ip in bad_interfaces:
-                    continue
-
-                if_addr = socket.inet_aton(ip.ip)
-                try:
-                    self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, if_addr)
-                    logger.info('Set interface to %s' % ip.ip)
-                except socket.error as msg:
-                    logger.warning("Failure connecting to interface %s: %r" % (ip.ip, msg))
-                    continue
-
-                # format: LOCATION: http://172.16.130.67:80/Basic_info.xml
-                url = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
-                self.known[usn]['LOCATION'] = url
-
-                self.do_notify(usn)
 
     # Переопределения для более удобного логирования
     def send_it(self, response, destination, delay, usn):
