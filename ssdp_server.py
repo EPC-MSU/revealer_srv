@@ -233,7 +233,9 @@ class UPNPSSDPServer(SSDPServer):
 
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         if system() == 'Linux':
-            result = self._setup_socket_on_linux()
+            # do same thing for linux and non-linux systems to iterate through all interfaces on each system
+            # See #97729
+            result = self._setup_socket_non_linux()
         else:
             result = self._setup_socket_non_linux()
 
@@ -249,6 +251,7 @@ class UPNPSSDPServer(SSDPServer):
 
         if system() == 'Linux':
             # do same thing for linux and non-linux systems to iterate through all interfaces on each system
+            # See #97729
             result = self._drop_membership_socket_non_linux()
             result = self._setup_socket_non_linux()
         else:
