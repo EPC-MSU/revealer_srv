@@ -2,16 +2,16 @@
 
 usage="Usage:
     $(basename "$0") [-h | --help] [--interface <interface> 
-	                            --dhcp <0|1> --ipv4 <address> 
+                                    --dhcp <0|1> --ipv4 <address> 
                                     --netmask <address> --gateway <address>]
 
      -h, --help                 show this help
      --interface <interface>    name of the interface to change network
                                 settings of
      --dhcp <0|1>               setting DHCP usage flag: 0 - use static IP,
-                            	1 - use dynamic IP from DHCP server
+                                1 - use dynamic IP from DHCP server
      --ipv4 <address>           IPv4 address for the interface (will be 
-		                used if static configuration method is
+                                used if static configuration method is
                                 chosen with --dhcp 0)
      --netmask <address>        Network mask address for the interface 
                                 (will be used if static configuration
@@ -24,7 +24,6 @@ Examples:
    $0 --interface eth0 --dhcp 1 
    $0 --interface eth0 --dhcp 0 --ipv4 192.168.1.2 --netmask 255.255.255.0 --gateway 192.168.1.1
 "
-
 # parse arguments
 for (( i=1; i<=$#; i++));
 do
@@ -59,16 +58,35 @@ do
     fi
 done
 
-echo "interface=$interface ipv4=$ipv4 netmask=$netmask dhcp=$dhcp gateway=$gateway"
-
-# TODO: add network setting function here
-
+#echo "interface=$interface ipv4=$ipv4 netmask=$netmask dhcp=$dhcp gateway=$gateway"
 
 if [ "$USER" != "root" ]
   then
    echo "Can't run network update script. Must be root."
   exit 1
 fi
+
+function IsNMRunning ()
+{
+  if systemctl is-active --quiet NetworkManager; then
+    echo "NetworkManager is running."
+      return 0
+  else
+    echo "NetworkManager is not running."
+      return 1
+  fi
+}
+
+function IsNetplanActive ()
+{
+  if command -v netplan &> /dev/null; then
+    echo "Netplan is installed."
+    return 0
+  else  
+    echo "Netplan is not installed."
+    return 1
+  fi
+}
 
 function ConvertNetmask ()
 {
@@ -118,9 +136,10 @@ function SetStaticIP ()
 
 function AddStaticConfigNetplan ()
 {
+
   rm -f /etc/netplan/*
 
-cat << EOF >> /etc/netplan/networkd-manager-${interface}.yaml
+  cat << EOF >> /etc/netplan/networkd-manager-${interface}.yaml
 network:
   version: 2
   ethernets:
@@ -145,15 +164,31 @@ network:
 EOF
 }
 
-if [[ "${dhcp}" == "1" ]]
-  then
+function AddDinamicConfigNM ()
+{
+  rm -f /etc/netplan/*
+
+  find /etc/NetworkManager/system-connections/ -type f -iname "*${interface}*" -delete
+  nmcli connection add type ethernet ifname ${interface} con-name ${interface} ipv4.method auto autoconnect yes
+}
+
+function AddStaticConfigNM ()
+{
+  find /etc/NetworkManager/system-connections/ -type f -iname "*${interface}*" -delete
+  nmcli connection add type ethernet ifname ${interface} con-name ${interface} ipv4.method manual ipv4.addresses ${ipv4}/${BITMASK} ipv4.gateway ${gateway} autoconnect yes
+  rm -f /etc/netplan/*
+
+}
+
+if [[ "${dhcp}" == "1" && IsNMRunning ]]; then
     SetDynamicIP
-    AddDynamicConfigNetplan
+    AddDinamicConfigNM
   else
-    if [[ "${dhcp}" == "0" ]]
-      then
+    if [[ "${dhcp}" == "0" && IsNMRunning ]]; then
+        echo "Dynam"
         ConvertNetmask
         SetStaticIP
-        AddStaticConfigNetplan
-    fi
+        AddStaticConfigNM
+  fi
 fi
+
