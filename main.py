@@ -65,7 +65,6 @@ if __name__ == '__main__':
 
     config_file_path = options.config
     http_port = 5050
-    time_after_error_sec = 3
     if options.verbose:
         # if verbose mode is requested - set logger level to info
         logger.setLevel(logging.DEBUG)
@@ -113,40 +112,60 @@ if __name__ == '__main__':
     product = config['SERVER']['product']
     product_version = config['SERVER']['product_version']
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
-
-    ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
-                                 password=config['SERVER']['password'])
+    try:
+        interfaces_update_task_timeout_sec = float(config['SERVER']['interfaces_update_timeout_sec'])
+        ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
+                                     password=config['SERVER']['password'],
+                                     interfaces_update_task_timeout_sec=interfaces_update_task_timeout_sec)
+    except Exception:
+        logger.warning("Interfaces update timeout should be time in seconds: int or float number. "
+                       "Default value will be set.")
+        ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
+                                     password=config['SERVER']['password'])
 
     # register instance (ssdp-service) for every adapter
     interfaces = DeviceInterfaces()
     ssdp_server.register_all_interfaces(server=server_data, location_port=http_port)
 
-    while True:
-        # update interfaces
-        interfaces.update()
-        # try to create http server and start
-        http_server = UPNPHTTPServer(http_port,
-                                     config['MAIN']['friendly_name'],
-                                     config['MAIN']['manufacturer'],
-                                     config['MAIN']['manufacturer_url'],
-                                     config['MAIN']['model_description'],
-                                     config['MAIN']['model_name'],
-                                     config['MAIN']['model_number'],
-                                     config['MAIN']['model_url'],
-                                     config['MAIN']['serial_number'],
-                                     '',
-                                     config['MAIN']['presentation_url'],
-                                     interfaces=interfaces,
-                                     redirect_port=config['MAIN']['presentation_port'])
-        http_server.start()
-        result = ssdp_server.run()
+    try:
+        while True:
+            # update interfaces if system list is updated
+            if ssdp_server.interfaces.update():
+                ssdp_server.update_socket()
+                ssdp_server.register_all_interfaces()
+            # try to create http server and start
+            http_server = UPNPHTTPServer(http_port,
+                                         config['MAIN']['friendly_name'],
+                                         config['MAIN']['manufacturer'],
+                                         config['MAIN']['manufacturer_url'],
+                                         config['MAIN']['model_description'],
+                                         config['MAIN']['model_name'],
+                                         config['MAIN']['model_number'],
+                                         config['MAIN']['model_url'],
+                                         config['MAIN']['serial_number'],
+                                         '',
+                                         config['MAIN']['presentation_url'],
+                                         interfaces=ssdp_server.interfaces,
+                                         redirect_port=config['MAIN']['presentation_port'])
+            http_server.start()
+            result = ssdp_server.run()
 
-        if result == 1:
-            logger.error("SSDP server could not be started because it can't join the multicast group"
-                         " on any interfaces.\n"
-                         "It will be restarted in {} seconds.".format(time_after_error_sec))
-            # stop http server to start again later
-            http_server.server.shutdown()
-            del http_server
-            # wait for some time to try again
-            time.sleep(time_after_error_sec)
+            if result == 1:
+                logger.error("SSDP server could not be started because it can't join the multicast group"
+                             " on any interfaces. Server will be stopped.")
+                # stop http server to start again later
+                http_server.server.shutdown()
+                del http_server
+                del ssdp_server
+                sys.exit(1)
+
+    except KeyboardInterrupt as err:
+        logger.warning("Execution was interrupted by keyboard signal. Server will be stopped.")
+        ssdp_server.stop_thread()
+        del ssdp_server
+        sys.exit()
+    except Exception as err:
+        logger.warning("Execution was interrupted by unknown exception: {}. Server will be stopped.".format(err))
+        ssdp_server.stop_thread()
+        del ssdp_server
+        sys.exit()

@@ -13,6 +13,8 @@ import ipaddress
 # TODO: maybe we can do it without another external module?
 import getmac
 import uuid
+import threading
+import time
 
 import subprocess
 
@@ -78,15 +80,18 @@ class DeviceInterfaces:
 
                 interface = ip.nice_name
 
-            self.mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface, "ips": ips_array}
+            self.mac_addresses_dict[name] = {
+                "mac": mac_address,
+                "uuid": uuid_name,
+                "interface_name": interface,
+                "ips": ips_array
+            }
 
     def update(self):
 
         adapters = ifaddr.get_adapters(include_unconfigured=True)
 
         self.adapters = adapters
-
-        # self.mac_addresses_dict = {}
 
         mac_addresses_dict = {}
 
@@ -121,11 +126,15 @@ class DeviceInterfaces:
 
                 interface = ip.nice_name
 
-            mac_addresses_dict[name] = {"mac": mac_address, "uuid": uuid_name, "interface_name": interface, "ips": ips_array}
+            mac_addresses_dict[name] = {
+                "mac": mac_address,
+                "uuid": uuid_name,
+                "interface_name": interface,
+                "ips": ips_array
+            }
 
         # after everything is done - check if the list has changed. If yes - return True as the indication flag that
         # interfaces was changed
-        #for name in mac_addresses_dict:
         if mac_addresses_dict == self.mac_addresses_dict:
             return False
         else:
@@ -207,7 +216,7 @@ class UPNPSSDPServer(SSDPServer):
     SSDP_MIPAS_RESULT_OK = "Accepted"
     SSDP_MIPAS_RESULT_ERROR = "Rejected"
 
-    def __init__(self, change_settings_script_path='', password=''):
+    def __init__(self, change_settings_script_path='', password='', interfaces_update_task_timeout_sec=10):
         SSDPServer.__init__(self)
 
         self.bad_interfaces = []
@@ -218,6 +227,53 @@ class UPNPSSDPServer(SSDPServer):
 
         self.adapters = ifaddr.get_adapters()
         self.interfaces = DeviceInterfaces()
+
+        # pause between checking current list of the system network interfaces in seconds
+        self.interfaces_update_task_timeout_sec = interfaces_update_task_timeout_sec
+
+        # creating a thread for checking current list of system network interfaces
+        self.interfaces_thread = threading.Thread(target=self._interface_update_task)
+        # signal to indicate that checking of the interfaces list is in process
+        self._interface_checking_in_process: threading.Event = threading.Event()
+        # signal to stop checking task in the thread
+        self._interface_checking_stop_flag: threading.Event = threading.Event()
+        # locking object
+        self.thread_lock = threading.Lock()
+
+    def stop_thread(self):
+        """
+        Method for stopping interfaces checking thread by setting the signal.
+
+        :return:
+        """
+        logger.warning("Wait for interface checking thread to stop...")
+        self._interface_checking_stop_flag.set()
+
+    def _interface_update_task(self):
+        """
+        Task for threading method for updating interfaces list. Timeout should be changeable from the config.
+
+        :return:
+        """
+
+        while not self._interface_checking_stop_flag.is_set():
+            time.sleep(self.interfaces_update_task_timeout_sec)
+            # check if sop signal was set while waiting
+            if not self._interface_checking_stop_flag.is_set():
+                logger.info("Interface checking task started...")
+                # set signal
+                self._interface_checking_in_process.set()
+                if self.interfaces.update():
+                    # if something changed in the interface list - update socket configuration
+                    self.update_socket()
+                    self.register_all_interfaces()
+                else:
+                    logger.info("System interfaces remain the same.")
+                # clear signal
+                self._interface_checking_in_process.clear()
+                logger.info("Interface checking task ended.")
+            else:
+                break
 
     def _setup_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -241,7 +297,7 @@ class UPNPSSDPServer(SSDPServer):
 
         return result
 
-    def _update_socket(self):
+    def update_socket(self):
         """
         Update socket with new interfaces configuration.
         :return:
@@ -285,7 +341,7 @@ class UPNPSSDPServer(SSDPServer):
             return RESULT_ERROR
 
     def _setup_socket_non_linux(self):
-        logger.info("Not a Linux system. Joining multicast on all interfaces")
+        logger.info("Joining multicast on all interfaces")
         if_count = 0
         good_interfaces = []
         # self.adapters = ifaddr.get_adapters()
@@ -332,7 +388,7 @@ class UPNPSSDPServer(SSDPServer):
             return RESULT_OK
 
     def _drop_membership_socket_non_linux(self):
-        logger.debug(f"Not a Linux system. Dropping multicast on all interfaces.")
+        logger.debug(f"Dropping multicast on all interfaces.")
         for good_if in self.good_interfaces:
             for ip in good_if["ips"]:
                 if not isinstance(ip, str):
@@ -392,6 +448,9 @@ class UPNPSSDPServer(SSDPServer):
             sys.exit()
         self.sock.settimeout(1)
 
+        # start thread for checking for interface list updates
+        self.interfaces_thread.start()
+
         while True:
             try:
                 data, addr = self.sock.recvfrom(1024)
@@ -400,7 +459,7 @@ class UPNPSSDPServer(SSDPServer):
                 continue
             except Exception as err:
                 # if we get unknown error - we shouldn't stop our working
-                logger.error("Error occured in SSDP server working: {}".format(err))
+                logger.error("Error occurred in SSDP server working: {}".format(err))
                 continue
         self.shutdown()
         return RESULT_ERROR
@@ -444,6 +503,13 @@ class UPNPSSDPServer(SSDPServer):
         # setting and password; or 1 - for invalid settings or password
         mipas_answer = ''
 
+        # if we have interface checking in process - wait till it is ended
+        while self._interface_checking_in_process.is_set():
+            pass
+
+        # lock threading
+        self.thread_lock.acquire()
+
         # Do we know about this service?
         for i in self.known.values():
             if i['MANIFESTATION'] == 'remote':
@@ -463,10 +529,6 @@ class UPNPSSDPServer(SSDPServer):
                         usn = v
                         uuid_st = self.exctract_uuid_st_from_usn(usn=usn)
                         device_uuid = uuid_st[5:].lower()
-                        if self.interfaces.update():
-                            # if something changed in the interface list - update socket configuration
-                            self._update_socket()
-                            self.register_all_interfaces()
                         device_ip = self.interfaces.get_ip_by_uuid(device_uuid=device_uuid)
 
                     if k == 'LOCATION':
@@ -538,6 +600,9 @@ class UPNPSSDPServer(SSDPServer):
                         logger.info("Starting the script fot changing network settings")
                         result = self.set_net_settings(netset=self.parse_mipas_field(headers['mipas']),
                                                        adapter=interface_name)
+
+        # lock threading
+        self.thread_lock.release()
 
     def do_notify_on_interface(self, usn, ip_addr):
         if_addr = socket.inet_aton(ip_addr)
@@ -749,3 +814,16 @@ class UPNPSSDPServer(SSDPServer):
                 return name
 
         return None
+
+    def __del__(self):
+
+        # set flag for thread task to stop
+        self._interface_checking_stop_flag.set()
+
+        # wait till it is ended
+        while self._interface_checking_in_process.is_set():
+            pass
+
+        self._drop_membership_socket_non_linux()
+        if self.sock is not None:
+            self.sock.close()
