@@ -13,7 +13,7 @@ fi
 rm -rf /usr/lib/pyssdp_server/webroot
 
 # copy folder with service source files
-cp -a ./ /usr/lib/pyssdp_server
+cp -a ../ /usr/lib/pyssdp_server
 
 echo "Copying server file to the /usr/lib/pyssdp_server/ directory..."
 # remove venv if exist
@@ -28,7 +28,7 @@ venv/bin/python3 -m pip install -r requirements.txt
 
 echo "Creating and starting a systemd service..."
 # copy
-cp pyssdp_server.service /etc/systemd/system
+cp ../pyssdp_server.service /etc/systemd/system
 
 # enable service
 systemctl enable pyssdp_server

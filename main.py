@@ -1,10 +1,9 @@
-from ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
+from src.ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
 import logging
-from http_server import UPNPHTTPServer
+from src.http_server import UPNPHTTPServer
 import configparser
 import sys
 from version import Version
-import time
 from optparse import OptionParser
 
 config_error_string = """This program requires a configuration file to work. Minimal structure:

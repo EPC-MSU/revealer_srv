@@ -4,7 +4,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from http import HTTPStatus
 from socketserver import ThreadingMixIn
 import threading
-from lib.ssdp import logger
+from .lib import logger
 
 
 class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
