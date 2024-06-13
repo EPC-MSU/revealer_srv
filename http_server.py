@@ -154,7 +154,10 @@ class UPNPHTTPServerBase(ThreadingSimpleServer):
         try:
             HTTPServer.__init__(self, server_address, request_handler_class)
         except OSError as e:
-            logger.fatal("Error creating http server on port %d. Please check that the port is not in use: %r"
+            logger.fatal("Error creating http server on port %d. "
+                         "Please check that the port is not in use by other proccess or "
+                         "wait for 1 minute before restarting the server since it may be"
+                         " OS holding the socket from previous server instance. Error: %r"
                          % (server_address[1], e))
             sys.exit()
         self.port = None

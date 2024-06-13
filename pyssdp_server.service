@@ -5,6 +5,8 @@ After=network-online.target
 [Service]
 WorkingDirectory=/usr/lib/pyssdp_server
 ExecStart=/bin/bash -c "PATH=/usr/lib/pyssdp_server/venv/bin:$PATH exec /usr/lib/pyssdp_server/venv/bin/python3 main.py"
+Restart=always
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target

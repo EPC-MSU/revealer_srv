@@ -368,9 +368,9 @@ class UPNPSSDPServer(SSDPServer):
                     good_interfaces.append(self.interfaces.mac_addresses_dict[name])
                 except socket.error as msg:
                     logger.debug('Failed to join multicast on interface "%s" with IPv4 = %s.'
-                                   ' This interface will be ignored. %r' % (
-                        self.interfaces.mac_addresses_dict[name]['interface_name'], ip, msg
-                    ))
+                                 ' This interface will be ignored. %r' % (
+                                     self.interfaces.mac_addresses_dict[name]['interface_name'], ip, msg
+                                 ))
                     self.bad_interfaces.append(ip)
 
         # check that all interfaces from self.good_interfaces is in the good_interfaces for this time
@@ -406,7 +406,7 @@ class UPNPSSDPServer(SSDPServer):
                     ))
                 except socket.error as msg:
                     logger.debug(f"Lost interface \"%s\" with IPv4 %s." % (
-                                       good_if['interface_name'], ip))
+                        good_if['interface_name'], ip))
 
         return RESULT_OK
 
@@ -747,7 +747,7 @@ class UPNPSSDPServer(SSDPServer):
         else:
             logger.error("Incorrect MIPAS field structure: {}. "
                          "It should be: '<password>;<dhcp_enabled>;<ip-address>;<netmask>;<gateway-address>;'".format(
-                         value))
+                value))
 
             return None
 
