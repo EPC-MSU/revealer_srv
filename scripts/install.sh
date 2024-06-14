@@ -28,7 +28,7 @@ venv/bin/python3 -m pip install -r requirements.txt
 
 echo "Creating and starting a systemd service..."
 # copy
-cp ../pyssdp_server.service /etc/systemd/system
+cp ./pyssdp_server.service /etc/systemd/system
 
 # enable service
 systemctl enable pyssdp_server

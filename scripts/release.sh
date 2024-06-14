@@ -1,3 +1,5 @@
+cd ..
+
 rm -rf build
 rm -rf dist
 rm -rf release
@@ -19,3 +21,5 @@ rm -rf build
 rm -rf dist
 rm -rf venv
 rm -rf *.spec
+
+cd scripts
