@@ -1,3 +1,4 @@
+cd ..
 
 if exist build rd /S /Q build
 if exist dist rd /S /Q dist
@@ -23,4 +24,7 @@ if exist build rd /S /Q build
 if exist dist rd /S /Q dist
 if exist venv rd /S /Q venv
 if exist *.spec del *.spec
+
+cd scripts
+
 pause
