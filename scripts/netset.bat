@@ -14,7 +14,6 @@
  
     if defined InterfaceName             echo Interface name:          %InterfaceName%
 	if not defined InterfaceName         echo Interface name:          not provided
-	if defined InterfaceName           ipconfig /showclassid %InterfaceName% > log.txt
 
 	if defined DHCP               echo DHCP enabled:          %DHCP%
 	if not defined DHCP           echo DHCP enabled:          not provided
