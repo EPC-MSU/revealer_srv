@@ -20,21 +20,21 @@ Optional SERVER fields: os, os_version."""
 
 def check_required_field(config, logger, section_name, field_name):
     if field_name not in config[section_name]:
-        logger.fatal("Error: no '%s' field in [%s] section of config file. \
-                     This field is required" % (field_name, section_name))
+        logger.fatal("Error: no '%s' field in [%s] section of config file. "
+                     "This field is required" % (field_name, section_name))
         sys.exit()
     else:
         if config[section_name][field_name] == "":
-            logger.fatal("Error: '%s' field in [%s] section of config file is empty. \
-                         This field is required" % (field_name, section_name))
+            logger.fatal("Error: '%s' field in [%s] section of config file is empty. "
+                         "This field is required" % (field_name, section_name))
             sys.exit()
     return
 
 
 def check_optional_field(config, logger, section_name, field_name):
     if field_name not in config[section_name]:
-        logger.warning("Warning: no '%s' field in [%s] section of config file. \
-                       An empty string will be sent" % (field_name, section_name))
+        logger.warning("Warning: no '%s' field in [%s] section of config file. "
+                       "An empty string will be sent" % (field_name, section_name))
         config[section_name][field_name] = ""
     return
 
@@ -98,7 +98,8 @@ if __name__ == '__main__':
     # Check other fields
     config_main_labels = ['manufacturer', 'manufacturer_url',
                           'model_description', 'model_name',
-                          'model_number', 'model_url', 'presentation_url']
+                          'model_number', 'model_url', 'presentation_url',
+                          'serial_number', 'presentation_port']
     for label in config_main_labels:
         check_optional_field(config, logger, 'MAIN', label)
     config_server_labels = ['os', 'os_version']
@@ -113,14 +114,32 @@ if __name__ == '__main__':
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
     try:
         interfaces_update_task_timeout_sec = float(config['SERVER']['interfaces_update_timeout_sec'])
-        ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
-                                     password=config['SERVER']['password'],
-                                     interfaces_update_task_timeout_sec=interfaces_update_task_timeout_sec)
+    except KeyError:
+        logger.warning("Warning: no 'interfaces_update_timeout_sec' field in [SERVER] section of config file."
+                       " Default time for interface checking cycle will be used = 10 sec.")
+        interfaces_update_task_timeout_sec = 10.0
     except Exception:
         logger.warning("Interfaces update timeout should be time in seconds: int or float number. "
                        "Default value will be set.")
-        ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
-                                     password=config['SERVER']['password'])
+        interfaces_update_task_timeout_sec = 10.0
+
+    try:
+        mipas_script_path = config['SERVER']['mipas_script_path']
+    except KeyError:
+        logger.warning("Warning: no 'mipas_script_path' field in [SERVER] section of config file."
+                       " Option of network settings setting via multicast will be turned off.")
+        mipas_script_path = ''
+
+    try:
+        password = config['SERVER']['password']
+    except KeyError:
+        logger.warning("Warning: no 'password' field in [SERVER] section of config file."
+                       " Password for network setting will be set to empty line.")
+        password = ''
+
+    ssdp_server = UPNPSSDPServer(change_settings_script_path=mipas_script_path,
+                                 password=password,
+                                 interfaces_update_task_timeout_sec=interfaces_update_task_timeout_sec)
 
     # register instance (ssdp-service) for every adapter
     interfaces = DeviceInterfaces()
