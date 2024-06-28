@@ -472,7 +472,7 @@ class UPNPSSDPServer(SSDPServer):
         :return:
         """
 
-        location_link = '/Basic_info.xml'
+        location_link = '/upnp_description.xml'
 
         self.adapters = ifaddr.get_adapters()
         for adapter in self.adapters:
@@ -488,7 +488,7 @@ class UPNPSSDPServer(SSDPServer):
 
                     # If there is a LOCATION field, the link needs to be correct
                     # for windows to show the device
-                    location_link = 'http://{}:{}/Basic_info.xml'.format(ip.ip, self.location_port)
+                    location_link = 'http://{}:{}/upnp_description.xml'.format(ip.ip, self.location_port)
 
         return location_link
 
@@ -540,8 +540,8 @@ class UPNPSSDPServer(SSDPServer):
 
                 # create location link with found device ip from adapter list for this usn
                 if device_ip is not None:
-                    response.append('LOCATION: http://%s:%s/Basic_info.xml' % (device_ip, self.location_port))
-                    self.known[usn]['LOCATION'] = 'http://%s:%s/Basic_info.xml' % (device_ip, self.location_port)
+                    response.append('LOCATION: http://%s:%s/upnp_description.xml' % (device_ip, self.location_port))
+                    self.known[usn]['LOCATION'] = 'http://%s:%s/upnp_description.xml' % (device_ip, self.location_port)
                 else:
                     # TODO: we don't need device without ip i think?
                     continue

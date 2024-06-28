@@ -47,9 +47,9 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
     # Handler for the GET requests
     # We override this method to be able to modify xml file
     def do_GET(self):
-        if self.path == '/Basic_info.xml':
+        if self.path == '/upnp_description.xml':
             try:
-                path = os.path.join(self.directory, 'Basic_info.xml')
+                path = os.path.join(self.directory, 'upnp_description.xml')
                 with open(path, "r") as f:
                     text = f.read()
                 # try to find interface name with this ip and its uuid for correct xml-data
