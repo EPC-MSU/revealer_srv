@@ -4,7 +4,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from http import HTTPStatus
 from socketserver import ThreadingMixIn
 import threading
-from lib.ssdp import logger
+from .lib import logger
 
 
 class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
@@ -47,9 +47,9 @@ class UPNPHTTPServerHandler(SimpleHTTPRequestHandler):
     # Handler for the GET requests
     # We override this method to be able to modify xml file
     def do_GET(self):
-        if self.path == '/Basic_info.xml':
+        if self.path == '/upnp_description.xml':
             try:
-                path = os.path.join(self.directory, 'Basic_info.xml')
+                path = os.path.join(self.directory, 'upnp_description.xml')
                 with open(path, "r") as f:
                     text = f.read()
                 # try to find interface name with this ip and its uuid for correct xml-data
@@ -154,7 +154,10 @@ class UPNPHTTPServerBase(ThreadingSimpleServer):
         try:
             HTTPServer.__init__(self, server_address, request_handler_class)
         except OSError as e:
-            logger.fatal("Error creating http server on port %d. Please check that the port is not in use: %r"
+            logger.fatal("Error creating http server on port %d. "
+                         "Please check that the port is not in use by other proccess or "
+                         "wait for 1 minute before restarting the server since it may be"
+                         " OS holding the socket from previous server instance. Error: %r"
                          % (server_address[1], e))
             sys.exit()
         self.port = None

@@ -1,10 +1,9 @@
-from ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
+from src.ssdp_server import UPNPSSDPServer, logger, DeviceInterfaces
 import logging
-from http_server import UPNPHTTPServer
+from src.http_server import UPNPHTTPServer
 import configparser
 import sys
 from version import Version
-import time
 from optparse import OptionParser
 
 config_error_string = """This program requires a configuration file to work. Minimal structure:
@@ -21,21 +20,21 @@ Optional SERVER fields: os, os_version."""
 
 def check_required_field(config, logger, section_name, field_name):
     if field_name not in config[section_name]:
-        logger.fatal("Error: no '%s' field in [%s] section of config file. \
-                     This field is required" % (field_name, section_name))
+        logger.fatal("Error: no '%s' field in [%s] section of config file. "
+                     "This field is required" % (field_name, section_name))
         sys.exit()
     else:
         if config[section_name][field_name] == "":
-            logger.fatal("Error: '%s' field in [%s] section of config file is empty. \
-                         This field is required" % (field_name, section_name))
+            logger.fatal("Error: '%s' field in [%s] section of config file is empty. "
+                         "This field is required" % (field_name, section_name))
             sys.exit()
     return
 
 
 def check_optional_field(config, logger, section_name, field_name):
     if field_name not in config[section_name]:
-        logger.warning("Warning: no '%s' field in [%s] section of config file. \
-                       An empty string will be sent" % (field_name, section_name))
+        logger.warning("Warning: no '%s' field in [%s] section of config file. "
+                       "An empty string will be sent" % (field_name, section_name))
         config[section_name][field_name] = ""
     return
 
@@ -65,7 +64,6 @@ if __name__ == '__main__':
 
     config_file_path = options.config
     http_port = 5050
-    time_after_error_sec = 3
     if options.verbose:
         # if verbose mode is requested - set logger level to info
         logger.setLevel(logging.DEBUG)
@@ -100,7 +98,8 @@ if __name__ == '__main__':
     # Check other fields
     config_main_labels = ['manufacturer', 'manufacturer_url',
                           'model_description', 'model_name',
-                          'model_number', 'model_url', 'presentation_url']
+                          'model_number', 'model_url', 'presentation_url',
+                          'serial_number', 'presentation_port']
     for label in config_main_labels:
         check_optional_field(config, logger, 'MAIN', label)
     config_server_labels = ['os', 'os_version']
@@ -113,47 +112,78 @@ if __name__ == '__main__':
     product = config['SERVER']['product']
     product_version = config['SERVER']['product_version']
     server_data = "{}/{} UPnP/2.0 {}/{}".format(os, os_version, product, product_version)
+    try:
+        interfaces_update_task_timeout_sec = float(config['SERVER']['interfaces_update_timeout_sec'])
+    except KeyError:
+        logger.warning("Warning: no 'interfaces_update_timeout_sec' field in [SERVER] section of config file."
+                       " Default time for interface checking cycle will be used = 10 sec.")
+        interfaces_update_task_timeout_sec = 10.0
+    except Exception:
+        logger.warning("Interfaces update timeout should be time in seconds: int or float number. "
+                       "Default value will be set.")
+        interfaces_update_task_timeout_sec = 10.0
 
-    ssdp_server = UPNPSSDPServer(change_settings_script_path=config['SERVER']['mipas_script_path'],
-                                 password=config['SERVER']['password'])
+    try:
+        mipas_script_path = config['SERVER']['mipas_script_path']
+    except KeyError:
+        logger.warning("Warning: no 'mipas_script_path' field in [SERVER] section of config file."
+                       " Option of network settings setting via multicast will be turned off.")
+        mipas_script_path = ''
+
+    try:
+        password = config['SERVER']['password']
+    except KeyError:
+        logger.warning("Warning: no 'password' field in [SERVER] section of config file."
+                       " Password for network setting will be set to empty line.")
+        password = ''
+
+    ssdp_server = UPNPSSDPServer(change_settings_script_path=mipas_script_path,
+                                 password=password,
+                                 interfaces_update_task_timeout_sec=interfaces_update_task_timeout_sec)
 
     # register instance (ssdp-service) for every adapter
     interfaces = DeviceInterfaces()
-    for if_name in interfaces.mac_addresses_dict:
-        uuid_name = interfaces.mac_addresses_dict[if_name]['uuid']
-        usn = 'uuid:{}::upnp:rootdevice'.format(uuid_name)
-        ssdp_server.register('local',
-                             usn,
-                             'upnp:rootdevice',
-                             '',  # will be set while constructing ssdp messages
-                             server=server_data, location_port=http_port)
+    ssdp_server.register_all_interfaces(server=server_data, location_port=http_port)
 
-    while True:
-        # update interfaces
-        interfaces.update()
-        # try to create http server and start
-        http_server = UPNPHTTPServer(http_port,
-                                     config['MAIN']['friendly_name'],
-                                     config['MAIN']['manufacturer'],
-                                     config['MAIN']['manufacturer_url'],
-                                     config['MAIN']['model_description'],
-                                     config['MAIN']['model_name'],
-                                     config['MAIN']['model_number'],
-                                     config['MAIN']['model_url'],
-                                     config['MAIN']['serial_number'],
-                                     '',
-                                     config['MAIN']['presentation_url'],
-                                     interfaces=interfaces,
-                                     redirect_port=config['MAIN']['presentation_port'])
-        http_server.start()
-        result = ssdp_server.run()
+    try:
+        while True:
+            # update interfaces if system list is updated
+            if ssdp_server.interfaces.update():
+                ssdp_server.update_socket()
+                ssdp_server.register_all_interfaces()
+            # try to create http server and start
+            http_server = UPNPHTTPServer(http_port,
+                                         config['MAIN']['friendly_name'],
+                                         config['MAIN']['manufacturer'],
+                                         config['MAIN']['manufacturer_url'],
+                                         config['MAIN']['model_description'],
+                                         config['MAIN']['model_name'],
+                                         config['MAIN']['model_number'],
+                                         config['MAIN']['model_url'],
+                                         config['MAIN']['serial_number'],
+                                         '',
+                                         config['MAIN']['presentation_url'],
+                                         interfaces=ssdp_server.interfaces,
+                                         redirect_port=config['MAIN']['presentation_port'])
+            http_server.start()
+            result = ssdp_server.run()
 
-        if result == 1:
-            logger.error("SSDP server could not be started because it can't join the multicast group"
-                         " on any interfaces.\n"
-                         "It will be restarted in {} seconds.".format(time_after_error_sec))
-            # stop http server to start again later
-            http_server.server.shutdown()
-            del http_server
-            # wait for some time to try again
-            time.sleep(time_after_error_sec)
+            if result == 1:
+                logger.error("SSDP server could not be started because it can't join the multicast group"
+                             " on any interfaces. Server will be stopped.")
+                # stop http server to start again later
+                http_server.server.shutdown()
+                del http_server
+                del ssdp_server
+                sys.exit(1)
+
+    except KeyboardInterrupt as err:
+        logger.warning("Execution was interrupted by keyboard signal. Server will be stopped.")
+        ssdp_server.stop_thread()
+        del ssdp_server
+        sys.exit()
+    except Exception as err:
+        logger.warning("Execution was interrupted by unknown exception: {}. Server will be stopped.".format(err))
+        ssdp_server.stop_thread()
+        del ssdp_server
+        sys.exit()
